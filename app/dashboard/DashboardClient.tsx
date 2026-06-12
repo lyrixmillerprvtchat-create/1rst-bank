@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase'
 import BottomNav from '@/components/BottomNav'
 import TransferModal from '@/components/TransferModal'
 import AddMoneyModal from '@/components/AddMoneyModal'
-import { Bell, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft, Zap, Tv, Gamepad2, Phone, Wifi } from 'lucide-react'
+import { Bell, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft, Zap, Tv, Gamepad2, Phone, Wifi, ArrowDownRight } from 'lucide-react'
+import WithdrawModal from '@/components/WithdrawModal'
 import type { Profile, Account, Transaction } from '@/lib/types'
 
 const services = [
@@ -23,6 +24,7 @@ export default function DashboardClient({ profile, account, transactions }: {
   const [showBalance, setShowBalance] = useState(true)
   const [showTransfer, setShowTransfer] = useState(false)
   const [showAddMoney, setShowAddMoney] = useState(false)
+  const [showWithdraw, setShowWithdraw] = useState(false)
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -57,14 +59,18 @@ export default function DashboardClient({ profile, account, transactions }: {
               {showBalance ? 'Hide' : 'Show'}
             </button>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2.5">
             <button onClick={() => setShowTransfer(true)}
               className="flex-1 py-2.5 rounded-xl bg-white text-blue-700 text-sm font-semibold flex items-center justify-center gap-1.5">
               <ArrowUpRight size={15} /> Transfer
             </button>
+            <button onClick={() => setShowWithdraw(true)}
+              className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 border border-white/30">
+              <ArrowDownRight size={15} /> Withdraw
+            </button>
             <button onClick={() => setShowAddMoney(true)}
               className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 border border-white/30">
-              <Plus size={15} /> Add Money
+              <Plus size={15} /> Add
             </button>
           </div>
         </div>
@@ -119,6 +125,7 @@ export default function DashboardClient({ profile, account, transactions }: {
 
       {showTransfer && <TransferModal account={account} onClose={() => setShowTransfer(false)} />}
       {showAddMoney && <AddMoneyModal profile={profile} account={account} onClose={() => setShowAddMoney(false)} />}
+      {showWithdraw && <WithdrawModal account={account} profile={profile} onClose={() => setShowWithdraw(false)} />}
       <BottomNav />
     </div>
   )
