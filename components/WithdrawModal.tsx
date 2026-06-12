@@ -360,7 +360,7 @@ export default function WithdrawModal({
 // ── Sub-components ─────────────────────────────────────────────────────────────
 function Sheet({ children, title, onClose, onBack }: { children: React.ReactNode; title: string; onClose: () => void; onBack?: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-end">
+    <div className="fixed inset-0 bg-black/60 z-[60] flex items-end">
       <div className="bg-white w-full max-w-[430px] mx-auto rounded-t-3xl p-6 pb-10 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center gap-3 mb-6">
           {onBack && (
