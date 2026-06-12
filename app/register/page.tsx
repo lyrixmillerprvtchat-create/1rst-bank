@@ -2,12 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
-
-function generateAccountNumber() {
-  return Math.floor(1000000000 + Math.random() * 9000000000).toString()
-}
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -20,24 +15,15 @@ export default function RegisterPage() {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const supabase = createClient()
-    const accountNumber = generateAccountNumber()
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: form.email,
-      password: form.password,
-      options: { data: { full_name: form.fullName } }
+
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
     })
-    if (signUpError) { setError(signUpError.message); setLoading(false); return }
-    if (data.user) {
-      await supabase.from('profiles').insert({
-        user_id: data.user.id, full_name: form.fullName,
-        account_number: accountNumber, tier: 'Tier 1', role: 'user', phone: form.phone
-      })
-      await supabase.from('accounts').insert({
-        user_id: data.user.id, account_number: accountNumber, balance: 0
-      })
-      router.push('/dashboard')
-    }
+    const data = await res.json()
+    if (!res.ok) { setError(data.error || 'Registration failed'); setLoading(false); return }
+    router.push('/login')
   }
 
   return (

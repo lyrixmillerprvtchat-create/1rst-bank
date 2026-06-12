@@ -7,7 +7,7 @@ import { Eye, EyeOff, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -18,6 +18,19 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     const supabase = createClient()
+
+    let email = identifier
+    if (!identifier.includes('@')) {
+      const res = await fetch('/api/resolve-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountNumber: identifier })
+      })
+      const data = await res.json()
+      if (!res.ok) { setError('Account number not found'); setLoading(false); return }
+      email = data.email
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false) }
     else router.push('/dashboard')
@@ -34,11 +47,11 @@ export default function LoginPage() {
           <h2 className="text-xl font-semibold text-gray-900 mb-6">Sign In</h2>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email</label>
+              <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">Email or Account Number</label>
               <input
-                type="email" value={email} onChange={e => setEmail(e.target.value)} required
+                type="text" value={identifier} onChange={e => setIdentifier(e.target.value)} required
                 className="mt-1 w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                placeholder="your@email.com"
+                placeholder="your@email.com or account number"
               />
             </div>
             <div>

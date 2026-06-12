@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import BottomNav from '@/components/BottomNav'
 import TransferModal from '@/components/TransferModal'
+import AddMoneyModal from '@/components/AddMoneyModal'
 import { Bell, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft, Zap, Tv, Gamepad2, Phone, Wifi } from 'lucide-react'
 import type { Profile, Account, Transaction } from '@/lib/types'
 
@@ -21,6 +22,7 @@ export default function DashboardClient({ profile, account, transactions }: {
   const router = useRouter()
   const [showBalance, setShowBalance] = useState(true)
   const [showTransfer, setShowTransfer] = useState(false)
+  const [showAddMoney, setShowAddMoney] = useState(false)
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -49,7 +51,7 @@ export default function DashboardClient({ profile, account, transactions }: {
           <p className="text-blue-200 text-xs font-medium mb-1">Total Balance</p>
           <div className="flex items-center gap-3 mb-4">
             <h3 className="text-white text-3xl font-bold">
-              {showBalance ? `₦${balance.toLocaleString('en-NG', { minimumFractionDigits: 2 })}` : '••••••'}
+              {showBalance ? `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '••••••'}
             </h3>
             <button onClick={() => setShowBalance(!showBalance)} className="text-blue-200 text-xs border border-blue-300/40 px-2 py-0.5 rounded-full">
               {showBalance ? 'Hide' : 'Show'}
@@ -60,7 +62,8 @@ export default function DashboardClient({ profile, account, transactions }: {
               className="flex-1 py-2.5 rounded-xl bg-white text-blue-700 text-sm font-semibold flex items-center justify-center gap-1.5">
               <ArrowUpRight size={15} /> Transfer
             </button>
-            <button className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 border border-white/30">
+            <button onClick={() => setShowAddMoney(true)}
+              className="flex-1 py-2.5 rounded-xl bg-white/20 text-white text-sm font-semibold flex items-center justify-center gap-1.5 border border-white/30">
               <Plus size={15} /> Add Money
             </button>
           </div>
@@ -106,7 +109,7 @@ export default function DashboardClient({ profile, account, transactions }: {
                   <p className="text-xs text-gray-400">{new Date(tx.created_at).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
                 </div>
                 <p className={`text-sm font-bold ${isCredit ? 'text-green-600' : 'text-red-500'}`}>
-                  {isCredit ? '+' : '-'}₦{tx.amount.toLocaleString()}
+                  {isCredit ? '+' : '-'}${tx.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             )
@@ -115,6 +118,7 @@ export default function DashboardClient({ profile, account, transactions }: {
       </div>
 
       {showTransfer && <TransferModal account={account} onClose={() => setShowTransfer(false)} />}
+      {showAddMoney && <AddMoneyModal profile={profile} account={account} onClose={() => setShowAddMoney(false)} />}
       <BottomNav />
     </div>
   )

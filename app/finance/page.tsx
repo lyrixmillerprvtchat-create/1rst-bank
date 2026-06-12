@@ -16,7 +16,7 @@ export default async function FinancePage() {
         <p className="text-blue-200 text-sm">Manage and grow your money</p>
         <div className="mt-5 bg-white/15 rounded-2xl p-4 border border-white/20">
           <p className="text-blue-200 text-xs mb-1">Net Worth</p>
-          <p className="text-white text-2xl font-bold">₦{(account?.balance ?? 0).toLocaleString('en-NG', { minimumFractionDigits: 2 })}</p>
+          <p className="text-white text-2xl font-bold">${(account?.balance ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
           <div className="flex items-center gap-1 mt-1">
             <TrendingUp size={12} className="text-green-300" />
             <p className="text-green-300 text-xs">All from 1rst Bank</p>

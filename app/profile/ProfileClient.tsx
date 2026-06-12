@@ -1,9 +1,21 @@
 'use client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import BottomNav from '@/components/BottomNav'
-import { User, Phone, Mail, Hash, Shield, LogOut, ChevronRight, Copy } from 'lucide-react'
+import { User, Phone, Mail, Hash, Shield, LogOut, ChevronRight, Copy, TrendingUp, Building2, FileText } from 'lucide-react'
 import type { Profile, Account } from '@/lib/types'
+
+const TIER_COLORS: Record<string, string> = {
+  'Tier 1': 'bg-gray-100 text-gray-600',
+  'Tier 2': 'bg-blue-100 text-blue-700',
+  'Tier 3': 'bg-yellow-100 text-yellow-700',
+}
+const TIER_LABELS: Record<string, string> = {
+  'Tier 1': 'Basic',
+  'Tier 2': 'Standard',
+  'Tier 3': 'Premium',
+}
 
 export default function ProfileClient({ profile, account, email }: { profile: Profile | null, account: Account | null, email: string }) {
   const router = useRouter()
@@ -18,11 +30,19 @@ export default function ProfileClient({ profile, account, email }: { profile: Pr
     navigator.clipboard.writeText(account?.account_number ?? '')
   }
 
-  const items = [
-    { icon: Hash, label: 'Account Number', value: account?.account_number ?? '—' },
-    { icon: Shield, label: 'Account Tier', value: profile?.tier ?? 'Tier 1' },
-    { icon: Phone, label: 'Phone', value: profile?.phone ?? '—' },
-    { icon: Mail, label: 'Email', value: email },
+  const tier = profile?.tier ?? 'Tier 1'
+
+  const details = [
+    { icon: Hash, label: 'Account Number', value: account?.account_number ?? '—', copy: true },
+    { icon: Shield, label: 'Account Tier', value: `${tier} — ${TIER_LABELS[tier] ?? tier}`, copy: false },
+    { icon: Phone, label: 'Phone', value: profile?.phone ?? '—', copy: false },
+    { icon: Mail, label: 'Email', value: email, copy: false },
+  ]
+
+  const actions = [
+    { icon: TrendingUp, label: 'Upgrade Account', desc: 'Unlock higher limits & features', href: '/upgrade', color: 'bg-blue-50 text-blue-600' },
+    { icon: Building2, label: 'Linked Banks', desc: 'Manage external bank accounts', href: '/linked-banks', color: 'bg-purple-50 text-purple-600' },
+    { icon: FileText, label: 'Bank Statement', desc: 'View & print your statement', href: '/statement', color: 'bg-green-50 text-green-600' },
   ]
 
   return (
@@ -34,12 +54,15 @@ export default function ProfileClient({ profile, account, email }: { profile: Pr
             <User size={36} className="text-white" />
           </div>
           <h2 className="text-white text-xl font-bold">{profile?.full_name ?? 'User'}</h2>
-          <p className="text-blue-200 text-sm mt-1">{profile?.tier ?? 'Tier 1'} Member</p>
+          <span className={`mt-2 text-xs font-semibold px-3 py-1 rounded-full ${TIER_COLORS[tier]}`}>
+            {tier} · {TIER_LABELS[tier] ?? tier}
+          </span>
         </div>
       </div>
 
       <div className="px-5 mt-6 space-y-3">
-        {items.map(({ icon: Icon, label, value }) => (
+        {/* Account Details */}
+        {details.map(({ icon: Icon, label, value, copy }) => (
           <div key={label} className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm">
             <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center">
               <Icon size={16} className="text-blue-600" />
@@ -48,14 +71,30 @@ export default function ProfileClient({ profile, account, email }: { profile: Pr
               <p className="text-xs text-gray-400 font-medium">{label}</p>
               <p className="text-sm text-gray-800 font-medium">{value}</p>
             </div>
-            {label === 'Account Number' && (
+            {copy && (
               <button onClick={copyAccountNumber}><Copy size={15} className="text-gray-400" /></button>
             )}
           </div>
         ))}
 
+        {/* Quick Actions */}
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2 pl-1">Account Services</p>
+        {actions.map(({ icon: Icon, label, desc, href, color }) => (
+          <Link key={href} href={href} className="bg-white rounded-2xl px-4 py-4 flex items-center gap-3 shadow-sm block">
+            <div className={`w-10 h-10 rounded-2xl ${color} flex items-center justify-center`}>
+              <Icon size={18} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-gray-800">{label}</p>
+              <p className="text-xs text-gray-400">{desc}</p>
+            </div>
+            <ChevronRight size={16} className="text-gray-300" />
+          </Link>
+        ))}
+
+        {/* Sign Out */}
         <button onClick={handleSignOut}
-          className="w-full bg-red-50 rounded-2xl px-4 py-3.5 flex items-center gap-3 mt-4">
+          className="w-full bg-red-50 rounded-2xl px-4 py-3.5 flex items-center gap-3 mt-2">
           <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
             <LogOut size={16} className="text-red-500" />
           </div>
