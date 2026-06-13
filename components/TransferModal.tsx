@@ -58,7 +58,7 @@ export default function TransferModal({ account, onClose }: { account: Account |
     const { data: { user } } = await supabase.auth.getUser()
     const senderName = (await supabase.from('profiles').select('full_name').eq('user_id', user?.id).single()).data?.full_name ?? 'Unknown'
 
-    const res = await fetch('/api/transfer', {
+    const res = await fetch('/api/transfer-request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
