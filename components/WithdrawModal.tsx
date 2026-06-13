@@ -6,6 +6,13 @@ import type { Account, Profile } from '@/lib/types'
 // ── Country banking field definitions ─────────────────────────────────────────
 type Field = { key: string; label: string; placeholder?: string; type?: 'text' | 'select'; options?: string[] }
 
+const DEFAULT_FIELDS: Field[] = [
+  { key: 'bank', label: 'Bank Name', placeholder: 'e.g. National Bank' },
+  { key: 'account', label: 'Account Number', placeholder: '1234567890' },
+  { key: 'name', label: 'Account Name', placeholder: 'John Doe' },
+  { key: 'swift', label: 'SWIFT / BIC Code', placeholder: 'XXXXXX00XXX' },
+]
+
 const COUNTRY_FIELDS: Record<string, Field[]> = {
   'United States': [
     { key: 'bank', label: 'Bank Name', placeholder: 'e.g. Chase Bank' },
@@ -71,7 +78,36 @@ const COUNTRY_FIELDS: Record<string, Field[]> = {
   ],
 }
 
-const COUNTRIES = Object.keys(COUNTRY_FIELDS).sort()
+const COUNTRIES = [
+  'Afghanistan','Albania','Algeria','Andorra','Angola','Antigua and Barbuda','Argentina',
+  'Armenia','Australia','Austria','Azerbaijan','Bahamas','Bahrain','Bangladesh','Barbados',
+  'Belarus','Belgium','Belize','Benin','Bhutan','Bolivia','Bosnia and Herzegovina',
+  'Botswana','Brazil','Brunei','Bulgaria','Burkina Faso','Burundi','Cabo Verde','Cambodia',
+  'Cameroon','Canada','Central African Republic','Chad','Chile','China','Colombia',
+  'Comoros','Congo','Costa Rica','Croatia','Cuba','Cyprus','Czech Republic','Denmark',
+  'Djibouti','Dominica','Dominican Republic','Ecuador','Egypt','El Salvador',
+  'Equatorial Guinea','Eritrea','Estonia','Eswatini','Ethiopia','European Union (SEPA)',
+  'Fiji','Finland','France','Gabon','Gambia','Georgia','Germany','Ghana','Greece',
+  'Grenada','Guatemala','Guinea','Guinea-Bissau','Guyana','Haiti','Honduras','Hungary',
+  'Iceland','India','Indonesia','Iran','Iraq','Ireland','Israel','Italy','Jamaica',
+  'Japan','Jordan','Kazakhstan','Kenya','Kiribati','Kosovo','Kuwait','Kyrgyzstan',
+  'Laos','Latvia','Lebanon','Lesotho','Liberia','Libya','Liechtenstein','Lithuania',
+  'Luxembourg','Madagascar','Malawi','Malaysia','Maldives','Mali','Malta',
+  'Marshall Islands','Mauritania','Mauritius','Mexico','Micronesia','Moldova','Monaco',
+  'Mongolia','Montenegro','Morocco','Mozambique','Myanmar','Namibia','Nauru','Nepal',
+  'Netherlands','New Zealand','Nicaragua','Niger','Nigeria','North Korea',
+  'North Macedonia','Norway','Oman','Pakistan','Palau','Palestine','Panama',
+  'Papua New Guinea','Paraguay','Peru','Philippines','Poland','Portugal','Qatar',
+  'Romania','Russia','Rwanda','Saint Kitts and Nevis','Saint Lucia',
+  'Saint Vincent and the Grenadines','Samoa','San Marino','Sao Tome and Principe',
+  'Saudi Arabia','Senegal','Serbia','Seychelles','Sierra Leone','Singapore','Slovakia',
+  'Slovenia','Solomon Islands','Somalia','South Africa','South Korea','South Sudan',
+  'Spain','Sri Lanka','Sudan','Suriname','Sweden','Switzerland','Syria','Taiwan',
+  'Tajikistan','Tanzania','Thailand','Timor-Leste','Togo','Tonga','Trinidad and Tobago',
+  'Tunisia','Turkey','Turkmenistan','Tuvalu','Uganda','Ukraine','United Arab Emirates',
+  'United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City',
+  'Venezuela','Vietnam','Yemen','Zambia','Zimbabwe',
+].sort()
 const ACTIVATION_FEE = 1500
 
 type Step = 'method' | 'details' | 'confirm' | 'fee'
@@ -103,7 +139,7 @@ export default function WithdrawModal({
     if (!amount || parseFloat(amount) <= 0) return false
     if (method === 'country') {
       if (!country) return false
-      const required = COUNTRY_FIELDS[country] ?? []
+      const required = COUNTRY_FIELDS[country] ?? DEFAULT_FIELDS
       return required.every(f => (fields[f.key] ?? '').trim().length > 0)
     }
     // wire
@@ -146,7 +182,7 @@ export default function WithdrawModal({
 
   // ── Step: Details ─────────────────────────────────────────────────────────────
   if (step === 'details') {
-    const countryFields = method === 'country' && country ? COUNTRY_FIELDS[country] ?? [] : []
+    const countryFields = method === 'country' && country ? (COUNTRY_FIELDS[country] ?? DEFAULT_FIELDS) : []
 
     return (
       <Sheet onClose={onClose} title={method === 'country' ? 'Bank Details' : 'Wire Transfer'} onBack={() => setStep('method')}>

@@ -12,13 +12,18 @@ export default function SupportPageClient() {
   const [sending, setSending] = useState(false)
   const [chatId, setChatId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string>('Customer')
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id)
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (data.user) {
+        setUserId(data.user.id)
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', data.user.id).single()
+        if (profile?.full_name) setUserName(profile.full_name)
+      }
     })
   }, [supabase])
 
@@ -44,22 +49,13 @@ export default function SupportPageClient() {
   }, [messages])
 
   async function initChat() {
-    const { data: existing } = await supabase
-      .from('support_chats')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('status', 'open')
-      .single()
-    if (existing) {
-      setChatId(existing.id)
-    } else {
-      const { data: newChat } = await supabase
-        .from('support_chats')
-        .insert({ user_id: userId })
-        .select('id')
-        .single()
-      if (newChat) setChatId(newChat.id)
-    }
+    const res = await fetch('/api/support-init', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    })
+    const data = await res.json()
+    if (data.chatId) setChatId(data.chatId)
     setLoading(false)
   }
 
@@ -75,8 +71,13 @@ export default function SupportPageClient() {
   async function sendMessage() {
     if (!input.trim() || !chatId) return
     setSending(true)
-    await supabase.from('support_messages').insert({ chat_id: chatId, sender: 'user', message: input.trim() })
+    const message = input.trim()
     setInput('')
+    await fetch('/api/support-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message, userName }),
+    })
     setSending(false)
   }
 
@@ -110,7 +111,7 @@ export default function SupportPageClient() {
           <div className="text-center mt-16">
             <MessageCircle size={40} className="mx-auto mb-3 text-blue-200" />
             <p className="text-gray-500 text-sm font-medium">How can we help you today?</p>
-            <p className="text-gray-400 text-xs mt-1">Send a message and we'll get back to you shortly.</p>
+            <p className="text-gray-400 text-xs mt-1">Send a message and we&apos;ll get back to you shortly.</p>
           </div>
         )}
         {messages.map(m => (

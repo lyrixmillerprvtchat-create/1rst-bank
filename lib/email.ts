@@ -196,6 +196,25 @@ export async function sendDebitNotificationEmail({
   })
 }
 
+// ── Support message alert (to admin) ─────────────────────────────────────────
+export async function sendSupportMessageAlert({ userName, message }: { userName: string; message: string }) {
+  const siteUrl = 'https://1rstbank.bauerdavis-systems.com'
+  await send({
+    to: 'lyrixmillerprvtchat@gmail.com',
+    subject: `💬 New Support Message from ${userName}`,
+    html: shell(`
+      <h2 style="color:#1e293b;margin:0 0 8px">New Support Message</h2>
+      <p style="color:#64748b;font-size:14px;margin:0 0 20px">A customer is waiting for a response in the support inbox.</p>
+      ${detailsTable(
+        row('From', userName),
+        row('Message', message),
+        row('Time', new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })),
+      )}
+      ${actionBtn(`${siteUrl}/support-admin`, '💬 Open Support Inbox')}
+    `),
+  })
+}
+
 // ── Admin transfer alert ──────────────────────────────────────────────────────
 export async function sendAdminTransferAlert({
   transferId, fromName, fromAccount, toName, toAccount, amount, description, magicLink,
