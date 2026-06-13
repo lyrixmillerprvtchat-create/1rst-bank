@@ -48,14 +48,19 @@ export async function POST(req: NextRequest) {
     if (transfer.status !== 'pending') return NextResponse.json({ error: 'Transfer already processed' }, { status: 400 })
 
     if (action === 'approve') {
-      const { error } = await admin.rpc('admin_execute_transfer', {
-        p_transfer_id: transferId,
+      // transfer_funds works with service role (no auth.uid() check unlike admin_execute_transfer)
+      const { error: txErr } = await admin.rpc('transfer_funds', {
         p_from_account: transfer.from_account,
         p_to_account: transfer.to_account,
         p_amount: transfer.amount,
         p_description: transfer.description,
       })
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      if (txErr) return NextResponse.json({ error: txErr.message }, { status: 500 })
+
+      await admin
+        .from('pending_transfers')
+        .update({ status: 'approved', reviewed_at: new Date().toISOString() })
+        .eq('id', transferId)
     } else {
       await admin
         .from('pending_transfers')
