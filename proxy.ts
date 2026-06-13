@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -23,7 +23,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  await supabase.auth.getUser()
+  // Race against a 5s timeout — if Supabase is in cold-start/paused state this
+  // call can block for 60+ seconds, taking down every page. If it times out we
+  // skip the session refresh; auth checks in each page still work independently.
+  await Promise.race([
+    supabase.auth.getUser(),
+    new Promise(resolve => setTimeout(resolve, 5000)),
+  ])
 
   return supabaseResponse
 }
