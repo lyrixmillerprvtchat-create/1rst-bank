@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
+
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  clean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+  clean(process.env.SUPABASE_SERVICE_ROLE_KEY)
 )
 
 export async function GET() {
