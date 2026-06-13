@@ -7,12 +7,32 @@ const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 export async function POST(req: NextRequest) {
   try {
-    // Verify caller is admin
-    const caller = await createServerSupabaseClient()
-    const { data: { user } } = await caller.auth.getUser()
+    const url = clean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+    const anonKey = clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
+    // Verify caller: try cookie-based session first, fall back to Bearer token
+    let user: { id: string } | null = null
+    try {
+      const caller = await createServerSupabaseClient()
+      const { data } = await caller.auth.getUser()
+      user = data?.user ?? null
+    } catch {}
+
+    if (!user) {
+      const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+      if (bearer) {
+        const tokenClient = createClient(url!, anonKey!, { auth: { autoRefreshToken: false, persistSession: false } })
+        const { data } = await tokenClient.auth.getUser(bearer)
+        user = data?.user ?? null
+      }
+    }
+
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { data: profile } = await caller.from('profiles').select('role').eq('user_id', user.id).single()
+    // Check admin role using service key (avoids RLS issues)
+    const serviceKey = clean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const adminCheck = createClient(url!, serviceKey!, { auth: { autoRefreshToken: false, persistSession: false } })
+    const { data: profile } = await adminCheck.from('profiles').select('role').eq('user_id', user.id).single()
     if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     const { transferId, action } = await req.json()
@@ -20,9 +40,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
     }
 
-    const url = clean(process.env.NEXT_PUBLIC_SUPABASE_URL)
-    const serviceKey = clean(process.env.SUPABASE_SERVICE_ROLE_KEY)
-    const admin = createClient(url!, serviceKey!, { auth: { autoRefreshToken: false, persistSession: false } })
+    const admin = adminCheck
 
     // Fetch transfer details
     const { data: transfer } = await admin.from('pending_transfers').select('*').eq('id', transferId).single()
