@@ -7,6 +7,8 @@ export interface Profile {
   role: 'user' | 'admin'
   phone: string
   created_at: string
+  status: 'active' | 'suspended' | 'frozen'
+  kyc_status: 'pending' | 'approved' | 'rejected'
 }
 
 export interface Account {

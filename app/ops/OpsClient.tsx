@@ -15,6 +15,8 @@ interface Client {
   phone: string
   balance: number
   created_at: string
+  status: string
+  kyc_status: string
 }
 
 interface PendingTransfer {
@@ -77,6 +79,8 @@ export default function OpsClient() {
   const [transferActionId, setTransferActionId] = useState<string | null>(null)
 
   const [adjustState, setAdjustState] = useState<Record<string, { amount: string; working: boolean; msg: string }>>({})
+  const [statusActionId, setStatusActionId] = useState<string | null>(null)
+  const [kycActionId, setKycActionId] = useState<string | null>(null)
 
   const [payerName, setPayerName] = useState('')
   const [toAcc, setToAcc] = useState('')
@@ -211,6 +215,32 @@ export default function OpsClient() {
     setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, balance: newBal } : c))
     setAdj(client.account_number, { working: false, amount: '', msg: `${type === 'credit' ? '+' : '-'}${fmt(val)} done` })
     setTimeout(() => setAdj(client.account_number, { msg: '' }), 3000)
+  }
+
+  async function handleSetKyc(client: Client, kyc_status: string) {
+    setKycActionId(client.account_number)
+    const res = await fetch('/api/admin/set-kyc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_number: client.account_number, kyc_status }),
+    })
+    if (res.ok) {
+      setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, kyc_status } : c))
+    }
+    setKycActionId(null)
+  }
+
+  async function handleSetStatus(client: Client, newStatus: string) {
+    setStatusActionId(client.account_number)
+    const res = await fetch('/api/admin/set-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_number: client.account_number, status: newStatus }),
+    })
+    if (res.ok) {
+      setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, status: newStatus } : c))
+    }
+    setStatusActionId(null)
   }
 
   async function handleAssignTransfer() {
@@ -442,6 +472,12 @@ export default function OpsClient() {
               {dataLoading && [1, 2, 3].map(i => <SkeletonCard key={i} />)}
               {!dataLoading && filtered.map(client => {
                 const adj = getAdj(client.account_number)
+                const status = client.status ?? 'active'
+                const kyc = client.kyc_status ?? 'pending'
+                const statusColor = status === 'active' ? 'bg-green-100 text-green-700' : status === 'suspended' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'
+                const kycColor = kyc === 'approved' ? 'bg-emerald-100 text-emerald-700' : kyc === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
+                const isActing = statusActionId === client.account_number
+                const isKycActing = kycActionId === client.account_number
                 return (
                   <div key={client.account_number} className="bg-white rounded-2xl shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between px-4 pt-4 pb-3">
@@ -457,10 +493,14 @@ export default function OpsClient() {
                       </div>
                       <div className="text-right">
                         <p className="text-base font-bold text-blue-700">{fmt(client.balance)}</p>
-                        <p className="text-[10px] text-gray-400">Joined {new Date(client.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
+                        <div className="flex gap-1 justify-end mt-0.5">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${kycColor}`}>KYC: {kyc.toUpperCase()}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{status.toUpperCase()}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-0.5">Joined {new Date(client.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
                       </div>
                     </div>
-                    <div className="border-t border-gray-50 px-4 py-3 bg-gray-50/50">
+                    <div className="border-t border-gray-50 px-4 py-3 bg-gray-50/50 space-y-2">
                       <div className="flex gap-2 items-center">
                         <input type="number" min="0.01" step="0.01" value={adj.amount}
                           onChange={e => setAdj(client.account_number, { amount: e.target.value, msg: '' })}
@@ -476,10 +516,44 @@ export default function OpsClient() {
                         </button>
                       </div>
                       {adj.msg && (
-                        <p className={`text-xs mt-2 font-medium flex items-center gap-1 ${adj.msg.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>
+                        <p className={`text-xs font-medium flex items-center gap-1 ${adj.msg.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>
                           {!adj.msg.startsWith('Error') && <CheckCircle size={11} />} {adj.msg}
                         </p>
                       )}
+                      {kyc !== 'approved' && (
+                        <div className="flex gap-2">
+                          <button onClick={() => handleSetKyc(client, 'approved')} disabled={isKycActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 disabled:opacity-50">
+                            {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />} Approve KYC
+                          </button>
+                          {kyc !== 'rejected' && (
+                            <button onClick={() => handleSetKyc(client, 'rejected')} disabled={isKycActing}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 disabled:opacity-50">
+                              {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Reject KYC
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        {status !== 'active' && (
+                          <button onClick={() => handleSetStatus(client, 'active')} disabled={isActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-green-50 text-green-700 disabled:opacity-50">
+                            {isActing ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />} Activate
+                          </button>
+                        )}
+                        {status !== 'suspended' && (
+                          <button onClick={() => handleSetStatus(client, 'suspended')} disabled={isActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-yellow-50 text-yellow-700 disabled:opacity-50">
+                            {isActing ? <Loader2 size={10} className="animate-spin" /> : <Clock size={10} />} Suspend
+                          </button>
+                        )}
+                        {status !== 'frozen' && (
+                          <button onClick={() => handleSetStatus(client, 'frozen')} disabled={isActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 disabled:opacity-50">
+                            {isActing ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Freeze
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )

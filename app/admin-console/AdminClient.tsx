@@ -5,7 +5,7 @@ import { Search, Plus, Minus, Loader2, CheckCircle, Shield, MessageSquare, Users
 import AdminSupportInbox from '@/components/AdminSupportInbox'
 import Link from 'next/link'
 
-interface Profile { full_name: string; account_number: string; tier: string; role: string; phone: string; created_at: string }
+interface Profile { full_name: string; account_number: string; tier: string; role: string; phone: string; created_at: string; status: string; kyc_status: string }
 interface ClientWithBalance extends Profile { balance: number }
 interface FoundUser { name: string; account: string; balance: number }
 interface UpgradeRequest { id: string; user_id: string; full_name: string; account_number: string; current_tier: string; requested_tier: string; status: string; requested_at: string }
@@ -36,6 +36,10 @@ export default function AdminClient({ defaultTab }: { defaultTab?: string }) {
   const [upgradeRequests, setUpgradeRequests] = useState<UpgradeRequest[]>([])
   const [upgradesLoading, setUpgradesLoading] = useState(false)
   const [upgradeActionId, setUpgradeActionId] = useState<string | null>(null)
+
+  // Status toggle state
+  const [statusActionId, setStatusActionId] = useState<string | null>(null)
+  const [kycActionId, setKycActionId] = useState<string | null>(null)
 
   // Pending transfers state
   const [transfers, setTransfers] = useState<PendingTransfer[]>([])
@@ -132,6 +136,32 @@ export default function AdminClient({ defaultTab }: { defaultTab?: string }) {
     }))
     setClients(withBalances)
     setClientsLoading(false)
+  }
+
+  async function handleSetKyc(client: ClientWithBalance, kyc_status: string) {
+    setKycActionId(client.account_number)
+    const res = await fetch('/api/admin/set-kyc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_number: client.account_number, kyc_status }),
+    })
+    if (res.ok) {
+      setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, kyc_status } : c))
+    }
+    setKycActionId(null)
+  }
+
+  async function handleSetStatus(client: ClientWithBalance, newStatus: string) {
+    setStatusActionId(client.account_number)
+    const res = await fetch('/api/admin/set-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_number: client.account_number, status: newStatus }),
+    })
+    if (res.ok) {
+      setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, status: newStatus } : c))
+    }
+    setStatusActionId(null)
   }
 
   function openClientAdjust(client: ClientWithBalance) {
@@ -245,34 +275,83 @@ export default function AdminClient({ defaultTab }: { defaultTab?: string }) {
               </div>
             )}
 
-            {!clientsLoading && clients.map(client => (
-              <div key={client.account_number} className="bg-white rounded-2xl p-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                      <span className="text-blue-700 font-bold text-sm">{client.full_name.charAt(0).toUpperCase()}</span>
+            {!clientsLoading && clients.map(client => {
+              const status = client.status ?? 'active'
+              const kyc = client.kyc_status ?? 'pending'
+              const statusColor = status === 'active' ? 'bg-green-100 text-green-700' : status === 'suspended' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-600'
+              const kycColor = kyc === 'approved' ? 'bg-emerald-100 text-emerald-700' : kyc === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
+              const isActing = statusActionId === client.account_number
+              const isKycActing = kycActionId === client.account_number
+              return (
+                <div key={client.account_number} className="bg-white rounded-2xl p-4 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                        <span className="text-blue-700 font-bold text-sm">{client.full_name.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{client.full_name}</p>
+                        <p className="text-xs text-gray-400 font-mono">{client.account_number}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800">{client.full_name}</p>
-                      <p className="text-xs text-gray-400 font-mono">{client.account_number}</p>
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-blue-700">${client.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                      <p className="text-xs text-gray-400">{client.tier}</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-blue-700">${client.balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
-                    <p className="text-xs text-gray-400">{client.tier}</p>
+                  <div className="mt-3 pt-3 border-t border-gray-50 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-gray-400">
+                        📞 {client.phone || 'N/A'} · Joined {new Date(client.created_at).toLocaleDateString('en-GB')}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${kycColor}`}>KYC: {kyc.toUpperCase()}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${statusColor}`}>{status.toUpperCase()}</span>
+                      </div>
+                    </div>
+                    {/* KYC actions */}
+                    {kyc !== 'approved' && (
+                      <div className="flex gap-2">
+                        <button onClick={() => handleSetKyc(client, 'approved')} disabled={isKycActing}
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 disabled:opacity-50">
+                          {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />} Approve KYC
+                        </button>
+                        {kyc !== 'rejected' && (
+                          <button onClick={() => handleSetKyc(client, 'rejected')} disabled={isKycActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 disabled:opacity-50">
+                            {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Reject KYC
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      {status !== 'active' && (
+                        <button onClick={() => handleSetStatus(client, 'active')} disabled={isActing}
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-green-50 text-green-700 disabled:opacity-50">
+                          {isActing ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />} Activate
+                        </button>
+                      )}
+                      {status !== 'suspended' && (
+                        <button onClick={() => handleSetStatus(client, 'suspended')} disabled={isActing}
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-yellow-50 text-yellow-700 disabled:opacity-50">
+                          {isActing ? <Loader2 size={10} className="animate-spin" /> : <Clock size={10} />} Suspend
+                        </button>
+                      )}
+                      {status !== 'frozen' && (
+                        <button onClick={() => handleSetStatus(client, 'frozen')} disabled={isActing}
+                          className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 disabled:opacity-50">
+                          {isActing ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Freeze
+                        </button>
+                      )}
+                      <button onClick={() => openClientAdjust(client)}
+                        className="ml-auto flex items-center gap-1 text-xs text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg">
+                        Adjust <ChevronRight size={12} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="mt-3 pt-3 border-t border-gray-50 flex items-center justify-between">
-                  <div className="text-xs text-gray-400">
-                    📞 {client.phone || 'N/A'} · Joined {new Date(client.created_at).toLocaleDateString('en-GB')}
-                  </div>
-                  <button onClick={() => openClientAdjust(client)}
-                    className="flex items-center gap-1 text-xs text-blue-700 font-semibold bg-blue-50 px-3 py-1.5 rounded-lg">
-                    Adjust <ChevronRight size={12} />
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </>
         )}
 

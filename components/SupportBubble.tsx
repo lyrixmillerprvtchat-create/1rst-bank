@@ -101,7 +101,7 @@ export default function SupportBubble() {
     setSending(false)
   }
 
-  const isAdminPage = ['/admin-console', '/ops', '/manager'].some(p => pathname.startsWith(p))
+  const isAdminPage = ['/admin-console', '/ops', '/manager', '/support'].some(p => pathname.startsWith(p))
   if (!userId || !supabase || isAdminPage) return null
 
   return (
