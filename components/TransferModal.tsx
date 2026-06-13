@@ -90,13 +90,13 @@ export default function TransferModal({ account, onClose }: { account: Account |
               <CheckCircle size={32} className="text-green-600" />
             </div>
             <div>
-              <p className="text-lg font-bold text-gray-800">Transfer Successful</p>
+              <p className="text-lg font-bold text-gray-800">Transfer Submitted</p>
               <p className="text-sm text-gray-500 mt-1">
-                <span className="font-semibold text-blue-700">${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span> has been sent to <span className="font-semibold">{recipientName}</span>.
+                Your transfer of <span className="font-semibold text-blue-700">${parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span> to <span className="font-semibold">{recipientName}</span> is under review.
               </p>
             </div>
-            <div className="w-full bg-green-50 border border-green-100 rounded-2xl px-4 py-3">
-              <p className="text-xs text-green-700 font-medium">Funds have been credited to the recipient&apos;s account immediately.</p>
+            <div className="w-full bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
+              <p className="text-xs text-blue-700 font-medium">Your transfer request has been received and is pending admin approval. You will be notified once it is processed.</p>
             </div>
             <button onClick={() => { onClose(); router.refresh() }}
               className="w-full py-3 rounded-xl bg-blue-700 text-white text-sm font-semibold">
