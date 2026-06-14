@@ -1,9 +1,8 @@
-const CACHE = '1rstbank-v1';
+const CACHE = '1rstbank-v2';
 const OFFLINE_URL = '/offline';
 
+// Only precache truly static files — never HTML pages or redirects
 const PRECACHE = [
-  '/',
-  '/login',
   '/offline',
   '/icon-192.png',
   '/icon-512.png',
@@ -12,18 +11,18 @@ const PRECACHE = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(PRECACHE))
+    caches.open(CACHE)
+      .then((c) => c.addAll(PRECACHE))
+      .then(() => self.skipWaiting())
   );
-  self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (e) => {
@@ -31,22 +30,41 @@ self.addEventListener('fetch', (e) => {
 
   const url = new URL(e.request.url);
 
-  // API routes: network-only, no caching
-  if (url.pathname.startsWith('/api/')) return;
+  // Never touch API calls or cross-origin requests
+  if (url.pathname.startsWith('/api/') || url.origin !== self.location.origin) return;
 
+  // Next.js immutable static chunks are content-hashed — safe to cache forever
+  if (url.pathname.startsWith('/_next/static/')) {
+    e.respondWith(
+      caches.match(e.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(e.request).then((res) => {
+          if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone()));
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
+  // Navigation (HTML pages): always network-first — never cache, banking needs fresh auth
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).catch(() =>
+        caches.match(e.request)
+          .then((cached) => cached || caches.match(OFFLINE_URL))
+      )
+    );
+    return;
+  }
+
+  // Public static assets (icons, manifest): network-first, cache as fallback
   e.respondWith(
     fetch(e.request)
       .then((res) => {
-        // Cache successful navigation and static asset responses
-        if (res.ok && (e.request.mode === 'navigate' || url.pathname.startsWith('/_next/'))) {
-          const clone = res.clone();
-          caches.open(CACHE).then((c) => c.put(e.request, clone));
-        }
+        if (res.ok) caches.open(CACHE).then((c) => c.put(e.request, res.clone()));
         return res;
       })
-      .catch(() => {
-        // Offline fallback
-        return caches.match(e.request) || caches.match(OFFLINE_URL);
-      })
+      .catch(() => caches.match(e.request))
   );
 });
