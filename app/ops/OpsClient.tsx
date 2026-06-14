@@ -1,10 +1,12 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import {
   Plus, Minus, Loader2, CheckCircle, RefreshCw,
   ArrowLeftRight, Shield, Search, Eye, EyeOff,
-  Users, UserPlus, Clock, XCircle, ArrowDownLeft
+  Users, UserPlus, Clock, XCircle, ArrowDownLeft,
+  ChevronDown, ChevronUp, FileText, Image as ImageIcon,
+  MessageSquare, Send, User, ChevronLeft, BadgeCheck, AlertTriangle
 } from 'lucide-react'
 
 interface Client {
@@ -17,6 +19,7 @@ interface Client {
   created_at: string
   status: string
   kyc_status: string
+  email?: string
 }
 
 interface PendingTransfer {
@@ -31,8 +34,34 @@ interface PendingTransfer {
   created_at: string
 }
 
+interface Transaction {
+  id: string
+  sender_account: string
+  receiver_account: string
+  amount: number
+  type: string
+  description: string
+  created_at: string
+}
+
+interface KycSubmission {
+  id: string
+  user_id: string
+  account_number: string
+  full_name: string
+  doc_type: string
+  doc_front_url: string
+  doc_back_url: string | null
+  selfie_url: string | null
+  status: string
+  submitted_at: string
+}
+
+interface SupportChat { id: string; user_id: string; status: string; created_at: string; latest?: string; full_name?: string }
+interface SupportMessage { id: string; sender: 'user' | 'admin'; message: string; attachment_url?: string; attachment_type?: string; created_at: string }
+
 type Screen = 'loading' | 'login' | 'dashboard'
-type Section = 'transfers' | 'clients' | 'signups' | 'assign'
+type Section = 'transfers' | 'clients' | 'kyc' | 'signups' | 'assign' | 'support'
 
 function fmt(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -82,6 +111,10 @@ export default function OpsClient() {
   const [statusActionId, setStatusActionId] = useState<string | null>(null)
   const [kycActionId, setKycActionId] = useState<string | null>(null)
 
+  const [expandedClient, setExpandedClient] = useState<string | null>(null)
+  const [clientTxns, setClientTxns] = useState<Record<string, Transaction[]>>({})
+  const [clientTxnLoading, setClientTxnLoading] = useState<string | null>(null)
+
   const [payerName, setPayerName] = useState('')
   const [toAcc, setToAcc] = useState('')
   const [txAmount, setTxAmount] = useState('')
@@ -89,11 +122,29 @@ export default function OpsClient() {
   const [txWorking, setTxWorking] = useState(false)
   const [txMsg, setTxMsg] = useState('')
 
+  // KYC tab
+  const [kycDocs, setKycDocs] = useState<KycSubmission[]>([])
+  const [kycLoading, setKycLoading] = useState(false)
+  const [kycActionDocId, setKycActionDocId] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
+
+  // Support tab
+  const [supportChats, setSupportChats] = useState<SupportChat[]>([])
+  const [selectedChat, setSelectedChat] = useState<SupportChat | null>(null)
+  const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([])
+  const [reply, setReply] = useState('')
+  const [replySending, setReplySending] = useState(false)
+  const [supportLoading, setSupportLoading] = useState(false)
+  const supportBottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [uploading, setUploading] = useState(false)
+
   const pendingCount = transfers.filter(t => t.status === 'pending').length
   const newSignups = clients.filter(c => {
     const d = new Date(c.created_at)
     return (Date.now() - d.getTime()) < 7 * 24 * 60 * 60 * 1000
   })
+  const pendingKyc = kycDocs.filter(k => k.status === 'pending').length
 
   useEffect(() => {
     async function checkSession() {
@@ -111,7 +162,6 @@ export default function OpsClient() {
     checkSession()
   }, [])
 
-  // Realtime: new pending transfer arrives
   useEffect(() => {
     if (screen !== 'dashboard') return
     const supabase = createClient()
@@ -126,15 +176,39 @@ export default function OpsClient() {
     return () => { supabase.removeChannel(sub) }
   }, [screen])
 
+  // Support realtime
+  useEffect(() => {
+    if (screen !== 'dashboard') return
+    const supabase = createClient()
+    const sub = supabase.channel('ops-support')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages' }, () => loadSupportChats())
+      .subscribe()
+    return () => { supabase.removeChannel(sub) }
+  }, [screen])
+
+  useEffect(() => {
+    if (!selectedChat) return
+    const supabase = createClient()
+    const sub = supabase.channel(`ops-chat-${selectedChat.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `chat_id=eq.${selectedChat.id}` },
+        (payload) => setSupportMessages(prev => [...prev, payload.new as SupportMessage])
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(sub) }
+  }, [selectedChat])
+
+  useEffect(() => {
+    supportBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [supportMessages])
+
   const loadAll = useCallback(async () => {
     setDataLoading(true)
     setTransfersLoading(true)
     const supabase = createClient()
 
-    // Load clients + balances
     const { data: profiles } = await supabase
       .from('profiles')
-      .select('user_id, full_name, account_number, tier, phone, created_at')
+      .select('user_id, full_name, account_number, tier, phone, created_at, status, kyc_status')
       .neq('role', 'admin')
       .order('created_at', { ascending: false })
 
@@ -147,7 +221,6 @@ export default function OpsClient() {
     }
     setDataLoading(false)
 
-    // Load transfers
     const { data: txData } = await supabase
       .from('pending_transfers')
       .select('*')
@@ -155,6 +228,35 @@ export default function OpsClient() {
     setTransfers(txData ?? [])
     setTransfersLoading(false)
   }, [])
+
+  async function loadKycDocs() {
+    setKycLoading(true)
+    const res = await fetch('/api/admin/kyc-docs')
+    const data = await res.json()
+    setKycDocs(data.submissions ?? [])
+    setKycLoading(false)
+  }
+
+  async function loadSupportChats() {
+    setSupportLoading(true)
+    const supabase = createClient()
+    const { data: chatData } = await supabase.from('support_chats').select('*').order('created_at', { ascending: false })
+    if (!chatData) { setSupportLoading(false); return }
+    const enriched = await Promise.all(chatData.map(async (chat) => {
+      const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', chat.user_id).single()
+      const { data: lastMsg } = await supabase.from('support_messages').select('message, attachment_type').eq('chat_id', chat.id).order('created_at', { ascending: false }).limit(1).single()
+      const latest = lastMsg?.attachment_type ? `[${lastMsg.attachment_type}]` : (lastMsg?.message ?? 'No messages yet')
+      return { ...chat, full_name: profile?.full_name ?? 'Unknown', latest }
+    }))
+    setSupportChats(enriched)
+    setSupportLoading(false)
+  }
+
+  async function loadSupportMessages(chatId: string) {
+    const supabase = createClient()
+    const { data } = await supabase.from('support_messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true })
+    if (data) setSupportMessages(data)
+  }
 
   async function handleLogin() {
     if (!password) return
@@ -226,6 +328,9 @@ export default function OpsClient() {
     })
     if (res.ok) {
       setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, kyc_status } : c))
+    } else {
+      const d = await res.json()
+      alert(d.error ?? 'KYC update failed')
     }
     setKycActionId(null)
   }
@@ -239,8 +344,23 @@ export default function OpsClient() {
     })
     if (res.ok) {
       setClients(prev => prev.map(c => c.account_number === client.account_number ? { ...c, status: newStatus } : c))
+    } else {
+      const d = await res.json()
+      alert(d.error ?? 'Status update failed')
     }
     setStatusActionId(null)
+  }
+
+  async function toggleExpand(acc: string) {
+    if (expandedClient === acc) { setExpandedClient(null); return }
+    setExpandedClient(acc)
+    if (!clientTxns[acc]) {
+      setClientTxnLoading(acc)
+      const res = await fetch(`/api/admin/client-transactions?account_number=${acc}`)
+      const data = await res.json()
+      setClientTxns(prev => ({ ...prev, [acc]: data.transactions ?? [] }))
+      setClientTxnLoading(null)
+    }
   }
 
   async function handleAssignTransfer() {
@@ -260,6 +380,55 @@ export default function OpsClient() {
     setTxAmount(''); setTxNote(''); setPayerName(''); setToAcc('')
     setTxWorking(false)
     setTimeout(() => setTxMsg(''), 4000)
+  }
+
+  async function handleKycDecision(id: string, status: 'approved' | 'rejected') {
+    setKycActionDocId(id)
+    const res = await fetch('/api/admin/kyc-docs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, status }),
+    })
+    if (res.ok) {
+      setKycDocs(prev => prev.map(k => k.id === id ? { ...k, status } : k))
+      const sub = kycDocs.find(k => k.id === id)
+      if (sub) {
+        setClients(prev => prev.map(c => c.account_number === sub.account_number ? { ...c, kyc_status: status } : c))
+      }
+    }
+    setKycActionDocId(null)
+  }
+
+  async function sendSupportReply() {
+    if (!reply.trim() || !selectedChat) return
+    setReplySending(true)
+    const supabase = createClient()
+    await supabase.from('support_messages').insert({ chat_id: selectedChat.id, sender: 'admin', message: reply.trim() })
+    setReply('')
+    setReplySending(false)
+  }
+
+  async function handleSupportFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !selectedChat) return
+    setUploading(true)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('chatId', selectedChat.id)
+    const res = await fetch('/api/support-upload', { method: 'POST', body: form })
+    const data = await res.json()
+    if (res.ok) {
+      const supabase = createClient()
+      await supabase.from('support_messages').insert({
+        chat_id: selectedChat.id,
+        sender: 'admin',
+        message: '',
+        attachment_url: data.url,
+        attachment_type: data.type,
+      })
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const filtered = clients.filter(c =>
@@ -321,6 +490,13 @@ export default function OpsClient() {
   // ── DASHBOARD ─────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="KYC document" className="max-w-full max-h-full rounded-xl object-contain" />
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' }} className="px-5 pt-12 pb-4">
         <div className="flex items-center justify-between mb-4">
@@ -338,15 +514,29 @@ export default function OpsClient() {
           </button>
         </div>
 
-        {/* Section tabs */}
-        <div className="grid grid-cols-4 gap-1">
+        {/* Section tabs — 2 rows of 3 */}
+        <div className="grid grid-cols-3 gap-1 mb-1">
           {([
             { key: 'transfers', label: 'Transfers', icon: ArrowLeftRight, badge: pendingCount },
             { key: 'clients', label: 'Clients', icon: Users, badge: 0 },
+            { key: 'kyc', label: 'KYC Docs', icon: BadgeCheck, badge: pendingKyc },
+          ] as const).map(({ key, label, icon: Icon, badge }) => (
+            <button key={key} onClick={() => { setActiveSection(key); if (key === 'kyc') loadKycDocs() }}
+              className={`relative py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${activeSection === key ? 'bg-white text-blue-700' : 'bg-white/10 text-white/70'}`}>
+              <Icon size={11} /> {label}
+              {badge > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold flex items-center justify-center text-white">{badge}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-1">
+          {([
             { key: 'signups', label: 'Sign-ups', icon: UserPlus, badge: newSignups.length },
             { key: 'assign', label: 'Assign', icon: ArrowDownLeft, badge: 0 },
+            { key: 'support', label: 'Support', icon: MessageSquare, badge: 0 },
           ] as const).map(({ key, label, icon: Icon, badge }) => (
-            <button key={key} onClick={() => setActiveSection(key)}
+            <button key={key} onClick={() => { setActiveSection(key); if (key === 'support') loadSupportChats() }}
               className={`relative py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${activeSection === key ? 'bg-white text-blue-700' : 'bg-white/10 text-white/70'}`}>
               <Icon size={11} /> {label}
               {badge > 0 && (
@@ -404,7 +594,6 @@ export default function OpsClient() {
                     {transfer.status.toUpperCase()}
                   </span>
                 </div>
-
                 <div className="bg-gray-50 rounded-xl px-3 py-2.5 space-y-1.5 mb-3 text-xs">
                   <div className="flex justify-between">
                     <span className="text-gray-400">To</span>
@@ -425,7 +614,6 @@ export default function OpsClient() {
                     <span className="text-gray-500">{new Date(transfer.created_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                   </div>
                 </div>
-
                 {transfer.status === 'pending' && (
                   <div className="flex gap-2">
                     <button onClick={() => handleTransferDecision(transfer, true)} disabled={transferActionId === transfer.id}
@@ -438,12 +626,9 @@ export default function OpsClient() {
                     </button>
                   </div>
                 )}
-
                 {transfer.status !== 'pending' && (
                   <div className={`flex items-center gap-2 rounded-xl px-3 py-2 ${transfer.status === 'approved' ? 'bg-green-50' : 'bg-red-50'}`}>
-                    {transfer.status === 'approved'
-                      ? <CheckCircle size={13} className="text-green-600" />
-                      : <XCircle size={13} className="text-red-500" />}
+                    {transfer.status === 'approved' ? <CheckCircle size={13} className="text-green-600" /> : <XCircle size={13} className="text-red-500" />}
                     <p className="text-xs font-medium text-gray-600">
                       {transfer.status === 'approved' ? 'Approved — funds moved.' : 'Declined by admin.'}
                     </p>
@@ -463,11 +648,9 @@ export default function OpsClient() {
                 placeholder="Search name or account…"
                 className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               All Clients {!dataLoading && `(${filtered.length})`}
             </p>
-
             <div className="space-y-3">
               {dataLoading && [1, 2, 3].map(i => <SkeletonCard key={i} />)}
               {!dataLoading && filtered.map(client => {
@@ -478,6 +661,9 @@ export default function OpsClient() {
                 const kycColor = kyc === 'approved' ? 'bg-emerald-100 text-emerald-700' : kyc === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-500'
                 const isActing = statusActionId === client.account_number
                 const isKycActing = kycActionId === client.account_number
+                const isExpanded = expandedClient === client.account_number
+                const txns = clientTxns[client.account_number] ?? []
+                const isTxnLoading = clientTxnLoading === client.account_number
                 return (
                   <div key={client.account_number} className="bg-white rounded-2xl shadow-sm overflow-hidden">
                     <div className="flex items-center justify-between px-4 pt-4 pb-3">
@@ -500,7 +686,9 @@ export default function OpsClient() {
                         <p className="text-[10px] text-gray-400 mt-0.5">Joined {new Date(client.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</p>
                       </div>
                     </div>
+
                     <div className="border-t border-gray-50 px-4 py-3 bg-gray-50/50 space-y-2">
+                      {/* Credit / Debit */}
                       <div className="flex gap-2 items-center">
                         <input type="number" min="0.01" step="0.01" value={adj.amount}
                           onChange={e => setAdj(client.account_number, { amount: e.target.value, msg: '' })}
@@ -520,21 +708,31 @@ export default function OpsClient() {
                           {!adj.msg.startsWith('Error') && <CheckCircle size={11} />} {adj.msg}
                         </p>
                       )}
-                      {kyc !== 'approved' && (
-                        <div className="flex gap-2">
+
+                      {/* KYC buttons */}
+                      <div className="flex gap-2 flex-wrap">
+                        {kyc !== 'approved' && (
                           <button onClick={() => handleSetKyc(client, 'approved')} disabled={isKycActing}
                             className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 disabled:opacity-50">
                             {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />} Approve KYC
                           </button>
-                          {kyc !== 'rejected' && (
-                            <button onClick={() => handleSetKyc(client, 'rejected')} disabled={isKycActing}
-                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 disabled:opacity-50">
-                              {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Reject KYC
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      <div className="flex gap-2">
+                        )}
+                        {kyc !== 'rejected' && (
+                          <button onClick={() => handleSetKyc(client, 'rejected')} disabled={isKycActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-red-50 text-red-600 disabled:opacity-50">
+                            {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Reject KYC
+                          </button>
+                        )}
+                        {kyc !== 'pending' && (
+                          <button onClick={() => handleSetKyc(client, 'pending')} disabled={isKycActing}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-600 disabled:opacity-50">
+                            {isKycActing ? <Loader2 size={10} className="animate-spin" /> : <AlertTriangle size={10} />} Reset KYC
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Status buttons */}
+                      <div className="flex gap-2 flex-wrap">
                         {status !== 'active' && (
                           <button onClick={() => handleSetStatus(client, 'active')} disabled={isActing}
                             className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-green-50 text-green-700 disabled:opacity-50">
@@ -554,6 +752,43 @@ export default function OpsClient() {
                           </button>
                         )}
                       </div>
+
+                      {/* View Transactions expand */}
+                      <button onClick={() => toggleExpand(client.account_number)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-blue-50 text-blue-700 text-xs font-semibold">
+                        <span className="flex items-center gap-1.5"><ArrowLeftRight size={11} /> Transaction History</span>
+                        {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                      </button>
+
+                      {isExpanded && (
+                        <div className="rounded-xl overflow-hidden border border-gray-100">
+                          {isTxnLoading && (
+                            <div className="flex justify-center py-5"><Loader2 size={16} className="animate-spin text-blue-600" /></div>
+                          )}
+                          {!isTxnLoading && txns.length === 0 && (
+                            <p className="text-xs text-gray-400 text-center py-5">No transactions yet</p>
+                          )}
+                          {!isTxnLoading && txns.map((t, i) => {
+                            const isCredit = t.receiver_account === client.account_number
+                            return (
+                              <div key={t.id} className={`flex items-center justify-between px-3 py-2.5 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isCredit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                                    {isCredit ? '+' : '-'}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-gray-700 leading-tight">{t.description || (isCredit ? 'Credit' : 'Debit')}</p>
+                                    <p className="text-[10px] text-gray-400">{new Date(t.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                                  </div>
+                                </div>
+                                <span className={`text-xs font-bold ${isCredit ? 'text-green-600' : 'text-red-500'}`}>
+                                  {isCredit ? '+' : '-'}{fmt(t.amount)}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                 )
@@ -567,13 +802,112 @@ export default function OpsClient() {
           </>
         )}
 
+        {/* ── KYC DOCS SECTION ─────────────────────────────── */}
+        {activeSection === 'kyc' && (
+          <>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">KYC Submissions {!kycLoading && `(${kycDocs.length})`}</p>
+              <button onClick={loadKycDocs} className="text-blue-700 text-xs flex items-center gap-1"><RefreshCw size={11} /> Refresh</button>
+            </div>
+
+            {kycLoading && [1, 2].map(i => (
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm animate-pulse space-y-3">
+                <div className="h-3 w-40 bg-gray-100 rounded" />
+                <div className="h-20 bg-gray-50 rounded-xl" />
+              </div>
+            ))}
+
+            {!kycLoading && kycDocs.length === 0 && (
+              <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+                <BadgeCheck size={28} className="mx-auto mb-2 text-gray-200" />
+                <p className="text-sm text-gray-400">No KYC submissions yet</p>
+              </div>
+            )}
+
+            {!kycLoading && kycDocs.map(sub => {
+              const statusColor = sub.status === 'approved' ? 'bg-emerald-100 text-emerald-700' : sub.status === 'rejected' ? 'bg-red-100 text-red-600' : 'bg-yellow-100 text-yellow-700'
+              const isActingDoc = kycActionDocId === sub.id
+              return (
+                <div key={sub.id} className="bg-white rounded-2xl shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{sub.full_name}</p>
+                      <p className="text-xs text-gray-400 font-mono">{sub.account_number}</p>
+                      <p className="text-xs text-gray-500 mt-0.5">Doc: <span className="font-medium">{sub.doc_type}</span></p>
+                    </div>
+                    <div className="text-right">
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${statusColor}`}>{sub.status.toUpperCase()}</span>
+                      <p className="text-[10px] text-gray-400 mt-1">{new Date(sub.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                    </div>
+                  </div>
+
+                  {/* Document thumbnails */}
+                  <div className="flex gap-2 mb-3 flex-wrap">
+                    {sub.doc_front_url && (
+                      <button onClick={() => setLightbox(sub.doc_front_url)} className="relative group">
+                        <img src={sub.doc_front_url} alt="Front" className="w-20 h-14 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Eye size={14} className="text-white" />
+                        </div>
+                        <p className="text-[9px] text-gray-400 text-center mt-0.5">Front</p>
+                      </button>
+                    )}
+                    {sub.doc_back_url && (
+                      <button onClick={() => setLightbox(sub.doc_back_url)} className="relative group">
+                        <img src={sub.doc_back_url} alt="Back" className="w-20 h-14 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Eye size={14} className="text-white" />
+                        </div>
+                        <p className="text-[9px] text-gray-400 text-center mt-0.5">Back</p>
+                      </button>
+                    )}
+                    {sub.selfie_url && (
+                      <button onClick={() => setLightbox(sub.selfie_url!)} className="relative group">
+                        <img src={sub.selfie_url} alt="Selfie" className="w-20 h-14 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                        <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                          <Eye size={14} className="text-white" />
+                        </div>
+                        <p className="text-[9px] text-gray-400 text-center mt-0.5">Selfie</p>
+                      </button>
+                    )}
+                    {!sub.doc_front_url && (
+                      <div className="flex items-center gap-2 text-gray-400">
+                        <FileText size={14} />
+                        <span className="text-xs">Documents stored (not previewable)</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {sub.status === 'pending' && (
+                    <div className="flex gap-2">
+                      <button onClick={() => handleKycDecision(sub.id, 'approved')} disabled={isActingDoc}
+                        className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                        {isActingDoc ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle size={12} />} Approve KYC
+                      </button>
+                      <button onClick={() => handleKycDecision(sub.id, 'rejected')} disabled={isActingDoc}
+                        className="flex-1 py-2 rounded-xl bg-red-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                        {isActingDoc ? <Loader2 size={12} className="animate-spin" /> : <XCircle size={12} />} Reject KYC
+                      </button>
+                    </div>
+                  )}
+                  {sub.status !== 'pending' && (
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium ${sub.status === 'approved' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                      {sub.status === 'approved' ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                      KYC {sub.status} — also updated on client profile
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </>
+        )}
+
         {/* ── SIGN-UPS SECTION ──────────────────────────────── */}
         {activeSection === 'signups' && (
           <>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
               Recent Sign-ups (last 7 days) {!dataLoading && `· ${newSignups.length} new`}
             </p>
-
             {dataLoading && [1, 2].map(i => (
               <div key={i} className="bg-white rounded-2xl p-4 shadow-sm animate-pulse">
                 <div className="flex items-center gap-3">
@@ -586,14 +920,12 @@ export default function OpsClient() {
                 </div>
               </div>
             ))}
-
             {!dataLoading && newSignups.length === 0 && (
               <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
                 <UserPlus size={28} className="mx-auto mb-2 text-gray-200" />
                 <p className="text-sm text-gray-400">No new sign-ups in the last 7 days</p>
               </div>
             )}
-
             {!dataLoading && newSignups.map(client => (
               <div key={client.account_number} className="bg-white rounded-2xl p-4 shadow-sm flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -609,8 +941,6 @@ export default function OpsClient() {
                 </div>
               </div>
             ))}
-
-            {/* All clients below new ones */}
             {!dataLoading && clients.length > newSignups.length && (
               <>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mt-2">All Clients ({clients.length})</p>
@@ -643,41 +973,29 @@ export default function OpsClient() {
               </div>
               <h2 className="text-sm font-bold text-gray-800">Assign Transfer</h2>
             </div>
-
-            {dataLoading && (
-              <div className="flex justify-center py-10">
-                <Loader2 size={20} className="animate-spin text-blue-700" />
-              </div>
+            {dataLoading && <div className="flex justify-center py-10"><Loader2 size={20} className="animate-spin text-blue-700" /></div>}
+            {!dataLoading && clients.length < 1 && (
+              <p className="text-sm text-gray-400 text-center py-6">No clients yet.</p>
             )}
-
-            {!dataLoading && clients.length < 2 && (
-              <p className="text-sm text-gray-400 text-center py-6">Need at least 2 clients to assign a transfer.</p>
-            )}
-
-            {!dataLoading && clients.length >= 2 && (
+            {!dataLoading && clients.length >= 1 && (
               <div className="space-y-3">
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Payer (From)</label>
-                  <input
-                    type="text"
-                    value={payerName}
-                    onChange={e => { setPayerName(e.target.value); setTxMsg('') }}
+                  <input type="text" value={payerName} onChange={e => { setPayerName(e.target.value); setTxMsg('') }}
                     placeholder="e.g. John Smith, Chase Bank, Cash…"
-                    className="mt-1 w-full px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
+                    className="mt-1 w-full px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Payee (To)</label>
                   <select value={toAcc} onChange={e => { setToAcc(e.target.value); setTxMsg('') }}
                     className="mt-1 w-full px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="">Select payee…</option>
-                    {clients.map(c => <option key={c.account_number} value={c.account_number} >{c.full_name} — {c.account_number} ({fmt(c.balance)})</option>)}
+                    {clients.map(c => <option key={c.account_number} value={c.account_number}>{c.full_name} — {c.account_number} ({fmt(c.balance)})</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Amount ($)</label>
-                  <input type="number" min="0.01" step="0.01" value={txAmount}
-                    onChange={e => { setTxAmount(e.target.value); setTxMsg('') }} placeholder="0.00"
+                  <input type="number" min="0.01" step="0.01" value={txAmount} onChange={e => { setTxAmount(e.target.value); setTxMsg('') }} placeholder="0.00"
                     className="mt-1 w-full px-3 py-2.5 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
@@ -690,13 +1008,114 @@ export default function OpsClient() {
                     {!txMsg.startsWith('Failed') && <CheckCircle size={13} />} {txMsg}
                   </div>
                 )}
-                <button onClick={handleAssignTransfer}
-                  disabled={!payerName || !toAcc || !txAmount || txWorking}
+                <button onClick={handleAssignTransfer} disabled={!payerName || !toAcc || !txAmount || txWorking}
                   className="w-full py-3 rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-blue-800 transition-colors">
                   {txWorking ? <><Loader2 size={15} className="animate-spin" /> Processing…</> : <><ArrowLeftRight size={15} /> Execute Transfer</>}
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── SUPPORT SECTION ───────────────────────────────── */}
+        {activeSection === 'support' && (
+          <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ minHeight: '520px' }}>
+            <div className="flex h-full" style={{ minHeight: '520px' }}>
+              {/* Chat list */}
+              <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-64 border-r border-gray-100`}>
+                <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <MessageSquare size={16} className="text-blue-700" />
+                    <span className="text-sm font-semibold text-gray-800">Support Inbox</span>
+                    <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{supportChats.length}</span>
+                  </div>
+                  <button onClick={loadSupportChats} className="text-gray-400 hover:text-blue-700">
+                    <RefreshCw size={13} />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto">
+                  {supportLoading && <div className="flex justify-center py-6"><Loader2 size={16} className="animate-spin text-blue-600" /></div>}
+                  {!supportLoading && supportChats.length === 0 && (
+                    <div className="text-center text-gray-400 text-xs mt-8 px-4">
+                      <MessageSquare size={24} className="mx-auto mb-2 opacity-40" />
+                      No support messages yet
+                    </div>
+                  )}
+                  {!supportLoading && supportChats.map(chat => (
+                    <button key={chat.id} onClick={() => { setSelectedChat(chat); loadSupportMessages(chat.id) }}
+                      className={`w-full px-4 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors ${selectedChat?.id === chat.id ? 'bg-blue-50' : ''}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                          <User size={12} className="text-blue-700" />
+                        </div>
+                        <span className="text-xs font-semibold text-gray-800 truncate">{chat.full_name}</span>
+                      </div>
+                      <p className="text-xs text-gray-400 truncate pl-9">{chat.latest}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Message thread */}
+              {selectedChat ? (
+                <div className="flex flex-col flex-1">
+                  <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+                    <button onClick={() => setSelectedChat(null)} className="md:hidden text-gray-500">
+                      <ChevronLeft size={18} />
+                    </button>
+                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                      <User size={12} className="text-blue-700" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-gray-800">{selectedChat.full_name}</p>
+                      <p className="text-xs text-gray-400">Customer Support</p>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50" style={{ maxHeight: '360px' }}>
+                    {supportMessages.map(m => (
+                      <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${m.sender === 'admin' ? 'bg-blue-700 text-white rounded-br-sm' : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'}`}>
+                          {m.attachment_url && m.attachment_type === 'image' && (
+                            <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 180 }} onClick={() => setLightbox(m.attachment_url!)} />
+                          )}
+                          {m.attachment_url && m.attachment_type === 'document' && (
+                            <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1.5 underline text-xs ${m.sender === 'admin' ? 'text-blue-200' : 'text-blue-700'}`}>
+                              <FileText size={12} /> View Document
+                            </a>
+                          )}
+                          {m.message && m.message}
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={supportBottomRef} />
+                  </div>
+
+                  <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2 items-center">
+                    <input hidden ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleSupportFileUpload} />
+                    <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                      className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 disabled:opacity-40 flex-shrink-0">
+                      {uploading ? <Loader2 size={14} className="animate-spin" /> : <ImageIcon size={14} />}
+                    </button>
+                    <input value={reply} onChange={e => setReply(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendSupportReply()}
+                      placeholder="Reply to customer..."
+                      className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button onClick={sendSupportReply} disabled={!reply.trim() || replySending}
+                      className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40">
+                      {replySending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="hidden md:flex flex-1 items-center justify-center text-gray-300">
+                  <div className="text-center">
+                    <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
+                    <p className="text-sm">Select a conversation</p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

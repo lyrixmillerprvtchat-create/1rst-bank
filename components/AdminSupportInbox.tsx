@@ -1,10 +1,17 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Send, Loader2, User, ChevronLeft } from 'lucide-react'
+import { MessageSquare, Send, Loader2, User, ChevronLeft, Image as ImageIcon, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 interface Chat { id: string; user_id: string; status: string; created_at: string; latest?: string; full_name?: string }
-interface Message { id: string; sender: 'user' | 'admin'; message: string; created_at: string }
+interface Message {
+  id: string
+  sender: 'user' | 'admin'
+  message: string
+  attachment_url?: string
+  attachment_type?: string
+  created_at: string
+}
 
 export default function AdminSupportInbox() {
   const [chats, setChats] = useState<Chat[]>([])
@@ -12,7 +19,10 @@ export default function AdminSupportInbox() {
   const [messages, setMessages] = useState<Message[]>([])
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = createClient()
 
   useEffect(() => {
@@ -47,8 +57,9 @@ export default function AdminSupportInbox() {
 
     const enriched = await Promise.all(chatData.map(async (chat) => {
       const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', chat.user_id).single()
-      const { data: lastMsg } = await supabase.from('support_messages').select('message').eq('chat_id', chat.id).order('created_at', { ascending: false }).limit(1).single()
-      return { ...chat, full_name: profile?.full_name ?? 'Unknown', latest: lastMsg?.message ?? 'No messages yet' }
+      const { data: lastMsg } = await supabase.from('support_messages').select('message, attachment_type').eq('chat_id', chat.id).order('created_at', { ascending: false }).limit(1).single()
+      const latest = lastMsg?.attachment_type ? `[${lastMsg.attachment_type}]` : (lastMsg?.message ?? 'No messages yet')
+      return { ...chat, full_name: profile?.full_name ?? 'Unknown', latest }
     }))
     setChats(enriched)
   }
@@ -66,94 +77,137 @@ export default function AdminSupportInbox() {
     setSending(false)
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !selectedChat) return
+    setUploading(true)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('chatId', selectedChat.id)
+    const res = await fetch('/api/support-upload', { method: 'POST', body: form })
+    const data = await res.json()
+    if (res.ok) {
+      await supabase.from('support_messages').insert({
+        chat_id: selectedChat.id,
+        sender: 'admin',
+        message: '',
+        attachment_url: data.url,
+        attachment_type: data.type,
+      })
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   return (
-    <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ height: '500px' }}>
-      <div className="flex h-full">
-        {/* Chat List */}
-        <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-64 border-r border-gray-100`}>
-          <div className="px-4 py-3 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <MessageSquare size={16} className="text-blue-700" />
-              <span className="text-sm font-semibold text-gray-800">Support Inbox</span>
-              <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{chats.length}</span>
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {chats.length === 0 && (
-              <div className="text-center text-gray-400 text-xs mt-8 px-4">
-                <MessageSquare size={24} className="mx-auto mb-2 opacity-40" />
-                No support messages yet
-              </div>
-            )}
-            {chats.map(chat => (
-              <button key={chat.id} onClick={() => setSelectedChat(chat)}
-                className={`w-full px-4 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors ${selectedChat?.id === chat.id ? 'bg-blue-50' : ''}`}>
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                    <User size={12} className="text-blue-700" />
-                  </div>
-                  <span className="text-xs font-semibold text-gray-800 truncate">{chat.full_name}</span>
-                </div>
-                <p className="text-xs text-gray-400 truncate pl-9">{chat.latest}</p>
-              </button>
-            ))}
-          </div>
+    <>
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="attachment" className="max-w-full max-h-full rounded-xl object-contain" />
         </div>
+      )}
 
-        {/* Message View */}
-        {selectedChat ? (
-          <div className="flex flex-col flex-1">
-            <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
-              <button onClick={() => setSelectedChat(null)} className="md:hidden text-gray-500">
-                <ChevronLeft size={18} />
-              </button>
-              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
-                <User size={12} className="text-blue-700" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-gray-800">{selectedChat.full_name}</p>
-                <p className="text-xs text-gray-400">Customer Support</p>
+      <div className="bg-white rounded-2xl shadow-sm overflow-hidden" style={{ height: '500px' }}>
+        <div className="flex h-full">
+          {/* Chat List */}
+          <div className={`${selectedChat ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-64 border-r border-gray-100`}>
+            <div className="px-4 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <MessageSquare size={16} className="text-blue-700" />
+                <span className="text-sm font-semibold text-gray-800">Support Inbox</span>
+                <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{chats.length}</span>
               </div>
             </div>
-
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
-              {messages.map(m => (
-                <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                    m.sender === 'admin'
-                      ? 'bg-blue-700 text-white rounded-br-sm'
-                      : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
-                  }`}>
-                    {m.message}
-                  </div>
+            <div className="flex-1 overflow-y-auto">
+              {chats.length === 0 && (
+                <div className="text-center text-gray-400 text-xs mt-8 px-4">
+                  <MessageSquare size={24} className="mx-auto mb-2 opacity-40" />
+                  No support messages yet
                 </div>
+              )}
+              {chats.map(chat => (
+                <button key={chat.id} onClick={() => setSelectedChat(chat)}
+                  className={`w-full px-4 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors ${selectedChat?.id === chat.id ? 'bg-blue-50' : ''}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                      <User size={12} className="text-blue-700" />
+                    </div>
+                    <span className="text-xs font-semibold text-gray-800 truncate">{chat.full_name}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 truncate pl-9">{chat.latest}</p>
+                </button>
               ))}
-              <div ref={bottomRef} />
             </div>
+          </div>
 
-            <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2">
-              <input
-                value={reply}
-                onChange={e => setReply(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendReply()}
-                placeholder="Reply to customer..."
-                className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button onClick={sendReply} disabled={!reply.trim() || sending}
-                className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40">
-                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              </button>
+          {/* Message View */}
+          {selectedChat ? (
+            <div className="flex flex-col flex-1">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-3">
+                <button onClick={() => setSelectedChat(null)} className="md:hidden text-gray-500">
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
+                  <User size={12} className="text-blue-700" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{selectedChat.full_name}</p>
+                  <p className="text-xs text-gray-400">Customer Support</p>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
+                {messages.map(m => (
+                  <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                      m.sender === 'admin'
+                        ? 'bg-blue-700 text-white rounded-br-sm'
+                        : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
+                    }`}>
+                      {m.attachment_url && m.attachment_type === 'image' && (
+                        <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 160 }} onClick={() => setLightbox(m.attachment_url!)} />
+                      )}
+                      {m.attachment_url && m.attachment_type === 'document' && (
+                        <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1.5 underline text-xs ${m.sender === 'admin' ? 'text-blue-200' : 'text-blue-700'}`}>
+                          <FileText size={12} /> View Document
+                        </a>
+                      )}
+                      {m.message && m.message}
+                    </div>
+                  </div>
+                ))}
+                <div ref={bottomRef} />
+              </div>
+
+              <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2 items-center">
+                <input hidden ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleFileUpload} />
+                <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                  className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 disabled:opacity-40 flex-shrink-0">
+                  {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+                </button>
+                <input
+                  value={reply}
+                  onChange={e => setReply(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendReply()}
+                  placeholder="Reply to customer..."
+                  className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button onClick={sendReply} disabled={!reply.trim() || sending}
+                  className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40">
+                  {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <div className="hidden md:flex flex-1 items-center justify-center text-gray-300">
-            <div className="text-center">
-              <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
-              <p className="text-sm">Select a conversation</p>
+          ) : (
+            <div className="hidden md:flex flex-1 items-center justify-center text-gray-300">
+              <div className="text-center">
+                <MessageSquare size={32} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Select a conversation</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

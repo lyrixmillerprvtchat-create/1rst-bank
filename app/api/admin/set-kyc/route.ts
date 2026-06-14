@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 export async function POST(req: Request) {
   const { account_number, kyc_status } = await req.json()
@@ -14,7 +11,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
   }
 
-  const { error } = await supabaseAdmin
+  const admin = createClient(
+    clean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    clean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  )
+
+  const { error } = await admin
     .from('profiles')
     .update({ kyc_status })
     .eq('account_number', account_number)

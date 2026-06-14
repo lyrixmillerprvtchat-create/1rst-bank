@@ -1,10 +1,17 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
-import { MessageCircle, X, Send, Loader2 } from 'lucide-react'
+import { MessageCircle, X, Send, Loader2, Image as ImageIcon, FileText } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
-interface Message { id: string; sender: 'user' | 'admin'; message: string; created_at: string }
+interface Message {
+  id: string
+  sender: 'user' | 'admin'
+  message: string
+  attachment_url?: string
+  attachment_type?: string
+  created_at: string
+}
 
 export default function SupportBubble() {
   const pathname = usePathname()
@@ -15,7 +22,10 @@ export default function SupportBubble() {
   const [chatId, setChatId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [unread, setUnread] = useState(0)
+  const [uploading, setUploading] = useState(false)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = useMemo(() => {
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) return null
     return createClient()
@@ -40,7 +50,6 @@ export default function SupportBubble() {
   useEffect(() => {
     if (!chatId || !supabase) return
     loadMessages()
-
     const sub = supabase
       .channel(`chat-${chatId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `chat_id=eq.${chatId}` },
@@ -51,7 +60,6 @@ export default function SupportBubble() {
         }
       )
       .subscribe()
-
     return () => { supabase.removeChannel(sub) }
   }, [chatId, open, supabase])
 
@@ -101,77 +109,121 @@ export default function SupportBubble() {
     setSending(false)
   }
 
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !chatId || !supabase) return
+    setUploading(true)
+    const form = new FormData()
+    form.append('file', file)
+    form.append('chatId', chatId)
+    const res = await fetch('/api/support-upload', { method: 'POST', body: form })
+    const data = await res.json()
+    if (res.ok) {
+      await supabase.from('support_messages').insert({
+        chat_id: chatId,
+        sender: 'user',
+        message: '',
+        attachment_url: data.url,
+        attachment_type: data.type,
+      })
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   const isAdminPage = ['/admin-console', '/ops', '/manager', '/support'].some(p => pathname.startsWith(p))
   if (!userId || !supabase || isAdminPage) return null
 
   return (
-    <div className="fixed bottom-20 right-5 z-50 flex flex-col items-end gap-3">
-      {open && (
-        <div className="w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden" style={{ height: '420px' }}>
-          {/* Header */}
-          <div className="px-4 py-3 flex items-center justify-between" style={{ background: 'linear-gradient(135deg, #003087, #0066cc)' }}>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-400" />
-              <span className="text-white text-sm font-semibold">1rst Bank Support</span>
-            </div>
-            <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white">
-              <X size={16} />
-            </button>
-          </div>
-
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
-            {messages.length === 0 && (
-              <div className="text-center text-gray-400 text-xs mt-8">
-                <MessageCircle size={28} className="mx-auto mb-2 opacity-40" />
-                <p>Hi! How can we help you today?</p>
-              </div>
-            )}
-            {messages.map(m => (
-              <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                  m.sender === 'user'
-                    ? 'bg-blue-700 text-white rounded-br-sm'
-                    : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
-                }`}>
-                  {m.sender === 'admin' && <p className="text-blue-600 font-semibold text-[10px] mb-0.5">Support Agent</p>}
-                  {m.message}
-                </div>
-              </div>
-            ))}
-            <div ref={bottomRef} />
-          </div>
-
-          {/* Input */}
-          <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2">
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-              placeholder="Type a message..."
-              className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-            <button onClick={sendMessage} disabled={!input.trim() || sending}
-              className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40">
-              {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            </button>
-          </div>
+    <>
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="attachment" className="max-w-full max-h-full rounded-xl object-contain" />
         </div>
       )}
 
-      {/* Bubble Button */}
-      <button
-        onClick={() => setOpen(o => !o)}
-        className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white relative transition-transform hover:scale-105"
-        style={{ background: 'linear-gradient(135deg, #003087, #0066cc)' }}
-      >
-        {open ? <X size={22} /> : <MessageCircle size={22} />}
-        {!open && unread > 0 && (
-          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center">
-            {unread}
-          </span>
+      <div className="fixed bottom-20 right-5 z-50 flex flex-col items-end gap-3">
+        {open && (
+          <div className="w-80 bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col overflow-hidden" style={{ height: '440px' }}>
+            {/* Header */}
+            <div className="px-4 py-3 flex items-center justify-between shrink-0" style={{ background: 'linear-gradient(135deg, #003087, #0066cc)' }}>
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-400" />
+                <span className="text-white text-sm font-semibold">1rst Bank Support</span>
+              </div>
+              <button onClick={() => setOpen(false)} className="text-white/70 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
+              {messages.length === 0 && (
+                <div className="text-center text-gray-400 text-xs mt-8">
+                  <MessageCircle size={28} className="mx-auto mb-2 opacity-40" />
+                  <p>Hi! How can we help you today?</p>
+                </div>
+              )}
+              {messages.map(m => (
+                <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                    m.sender === 'user'
+                      ? 'bg-blue-700 text-white rounded-br-sm'
+                      : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
+                  }`}>
+                    {m.sender === 'admin' && <p className="text-blue-600 font-semibold text-[10px] mb-0.5">Support Agent</p>}
+                    {m.attachment_url && m.attachment_type === 'image' && (
+                      <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 140 }} onClick={() => setLightbox(m.attachment_url!)} />
+                    )}
+                    {m.attachment_url && m.attachment_type === 'document' && (
+                      <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1 underline text-[10px] ${m.sender === 'user' ? 'text-blue-200' : 'text-blue-700'}`}>
+                        <FileText size={11} /> View Document
+                      </a>
+                    )}
+                    {m.message && m.message}
+                  </div>
+                </div>
+              ))}
+              <div ref={bottomRef} />
+            </div>
+
+            {/* Input */}
+            <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2 items-center shrink-0">
+              <input hidden ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleFileUpload} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 disabled:opacity-40 flex-shrink-0">
+                {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+              </button>
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                placeholder="Type a message..."
+                className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button onClick={sendMessage} disabled={!input.trim() || sending}
+                className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40 flex-shrink-0">
+                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              </button>
+            </div>
+          </div>
         )}
-      </button>
-    </div>
+
+        {/* Bubble Button */}
+        <button
+          onClick={() => setOpen(o => !o)}
+          className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white relative transition-transform hover:scale-105"
+          style={{ background: 'linear-gradient(135deg, #003087, #0066cc)' }}
+        >
+          {open ? <X size={22} /> : <MessageCircle size={22} />}
+          {!open && unread > 0 && (
+            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center text-white">
+              {unread}
+            </span>
+          )}
+        </button>
+      </div>
+    </>
   )
 }
