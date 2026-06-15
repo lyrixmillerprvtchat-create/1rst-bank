@@ -76,6 +76,7 @@ export async function POST(req: NextRequest) {
       doc_back_url:  backUrl,
       selfie_url:    selfieUrl,
       status:        'pending',
+      submitted_at:  new Date().toISOString(),
     })
     if (subErr) return NextResponse.json({ error: subErr.message }, { status: 500 })
 

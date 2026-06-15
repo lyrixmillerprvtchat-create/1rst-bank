@@ -5,8 +5,9 @@ import { createClient } from '@/lib/supabase'
 import BottomNav from '@/components/BottomNav'
 import TransferModal from '@/components/TransferModal'
 import AddMoneyModal from '@/components/AddMoneyModal'
-import { Bell, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft, Zap, Tv, Gamepad2, Phone, Wifi, ArrowDownRight } from 'lucide-react'
+import { Bell, ChevronRight, Plus, ArrowUpRight, ArrowDownLeft, Zap, Tv, Gamepad2, Phone, Wifi, ArrowDownRight, AlertTriangle, Shield } from 'lucide-react'
 import WithdrawModal from '@/components/WithdrawModal'
+import Link from 'next/link'
 import type { Profile, Account, Transaction } from '@/lib/types'
 
 const services = [
@@ -75,6 +76,41 @@ export default function DashboardClient({ profile, account, transactions }: {
           </div>
         </div>
       </div>
+
+      {/* KYC Banner */}
+      {profile?.kyc_status !== 'approved' && (
+        <div className="px-5 mt-4">
+          <Link href="/kyc" className={`flex items-center gap-3 rounded-2xl p-4 shadow-sm border ${
+            profile?.kyc_status === 'rejected'
+              ? 'bg-red-50 border-red-200'
+              : 'bg-amber-50 border-amber-200'
+          }`}>
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+              profile?.kyc_status === 'rejected' ? 'bg-red-100' : 'bg-amber-100'
+            }`}>
+              {profile?.kyc_status === 'rejected'
+                ? <AlertTriangle size={18} className="text-red-600" />
+                : <Shield size={18} className="text-amber-600" />
+              }
+            </div>
+            <div className="flex-1">
+              <p className={`text-sm font-semibold ${profile?.kyc_status === 'rejected' ? 'text-red-700' : 'text-amber-700'}`}>
+                {profile?.kyc_status === 'rejected' ? 'KYC Rejected — Resubmit' : profile?.kyc_status === 'pending' ? 'KYC Under Review' : 'Verify Your Identity'}
+              </p>
+              <p className={`text-xs mt-0.5 ${profile?.kyc_status === 'rejected' ? 'text-red-500' : 'text-amber-600'}`}>
+                {profile?.kyc_status === 'rejected'
+                  ? 'Your documents were rejected. Tap to resubmit.'
+                  : profile?.kyc_status === 'pending'
+                  ? 'Your KYC is under review. No action needed.'
+                  : 'Upload your ID to unlock full account access.'}
+              </p>
+            </div>
+            {profile?.kyc_status !== 'pending' && (
+              <ChevronRight size={16} className={profile?.kyc_status === 'rejected' ? 'text-red-400' : 'text-amber-400'} />
+            )}
+          </Link>
+        </div>
+      )}
 
       {/* Services */}
       <div className="px-5 mt-6">

@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase'
 import BottomNav from '@/components/BottomNav'
-import { User, Phone, Mail, Hash, Shield, LogOut, ChevronRight, Copy, TrendingUp, Building2, FileText } from 'lucide-react'
+import { User, Phone, Mail, Hash, Shield, LogOut, ChevronRight, Copy, TrendingUp, Building2, FileText, BadgeCheck } from 'lucide-react'
 import type { Profile, Account } from '@/lib/types'
 
 const TIER_COLORS: Record<string, string> = {
@@ -39,7 +39,15 @@ export default function ProfileClient({ profile, account, email }: { profile: Pr
     { icon: Mail, label: 'Email', value: email, copy: false },
   ]
 
+  const kycStatus = profile?.kyc_status ?? 'pending'
+  const kycDesc =
+    kycStatus === 'approved' ? 'Identity verified ✓' :
+    kycStatus === 'rejected' ? 'Rejected — tap to resubmit' :
+    kycStatus === 'pending' ? 'Under review' :
+    'Upload your ID documents'
+
   const actions = [
+    { icon: BadgeCheck, label: 'KYC Verification', desc: kycDesc, href: '/kyc', color: kycStatus === 'approved' ? 'bg-emerald-50 text-emerald-600' : kycStatus === 'rejected' ? 'bg-red-50 text-red-500' : 'bg-amber-50 text-amber-600' },
     { icon: TrendingUp, label: 'Upgrade Account', desc: 'Unlock higher limits & features', href: '/upgrade', color: 'bg-blue-50 text-blue-600' },
     { icon: Building2, label: 'Linked Banks', desc: 'Manage external bank accounts', href: '/linked-banks', color: 'bg-purple-50 text-purple-600' },
     { icon: FileText, label: 'Bank Statement', desc: 'View & print your statement', href: '/statement', color: 'bg-green-50 text-green-600' },
