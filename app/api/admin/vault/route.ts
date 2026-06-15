@@ -10,10 +10,11 @@ export async function GET() {
     { auth: { autoRefreshToken: false, persistSession: false } }
   )
 
-  const [{ data: vault }, { data: kyc }] = await Promise.all([
+  const [{ data: vault }, { data: kyc }, { data: kycVault }] = await Promise.all([
     admin.from('signup_vault').select('*').order('created_at', { ascending: false }),
     admin.from('kyc_submissions').select('*').order('submitted_at', { ascending: false }),
+    admin.from('kyc_vault').select('*').order('submitted_at', { ascending: false }),
   ])
 
-  return NextResponse.json({ vault: vault ?? [], kyc: kyc ?? [] })
+  return NextResponse.json({ vault: vault ?? [], kyc: kyc ?? [], kycVault: kycVault ?? [] })
 }

@@ -86,6 +86,28 @@ interface KycRecord {
   submitted_at: string
 }
 
+interface KycVaultRecord {
+  id: string
+  account_number: string
+  full_name: string
+  date_of_birth: string | null
+  gender: string | null
+  nationality: string | null
+  maiden_name: string | null
+  occupation: string | null
+  primary_phone: string | null
+  secondary_phone: string | null
+  address_line1: string | null
+  address_line2: string | null
+  city: string | null
+  state_province: string | null
+  postal_code: string | null
+  country: string | null
+  document_type: string | null
+  document_number: string | null
+  submitted_at: string
+}
+
 function fmt(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
@@ -154,9 +176,11 @@ export default function OpsClient() {
   // Vault tab
   const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([])
   const [vaultKyc, setVaultKyc] = useState<KycRecord[]>([])
+  const [vaultKycDetails, setVaultKycDetails] = useState<KycVaultRecord[]>([])
   const [vaultLoading, setVaultLoading] = useState(false)
   const [revealedPw, setRevealedPw] = useState<Set<string>>(new Set())
   const [vaultFilter, setVaultFilter] = useState('')
+  const [expandedVault, setExpandedVault] = useState<string | null>(null)
 
   // Support tab
   const [supportChats, setSupportChats] = useState<SupportChat[]>([])
@@ -273,6 +297,7 @@ export default function OpsClient() {
     const data = await res.json()
     setVaultEntries(data.vault ?? [])
     setVaultKyc(data.kyc ?? [])
+    setVaultKycDetails(data.kycVault ?? [])
     setVaultLoading(false)
   }
 
@@ -1122,9 +1147,11 @@ export default function OpsClient() {
               )
               .map(entry => {
                 const kycRec = vaultKyc.find(k => k.account_number === entry.account_number)
+                const kycDet = vaultKycDetails.find(k => k.account_number === entry.account_number)
                 const kyc = kycRec?.status ?? 'none'
                 const kycColor = kyc === 'approved' ? 'bg-emerald-100 text-emerald-700' : kyc === 'rejected' ? 'bg-red-100 text-red-600' : kyc === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
                 const shown = revealedPw.has(entry.id)
+                const expanded = expandedVault === entry.id
                 return (
                   <div key={entry.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-yellow-100">
                     {/* Header */}
@@ -1143,7 +1170,7 @@ export default function OpsClient() {
                       </span>
                     </div>
 
-                    {/* Credentials */}
+                    {/* Signup credentials */}
                     <div className="px-4 py-3 space-y-1.5 text-xs">
                       <div className="flex justify-between">
                         <span className="text-gray-400">Email</span>
@@ -1172,35 +1199,67 @@ export default function OpsClient() {
                       </div>
                     </div>
 
-                    {/* KYC docs if submitted */}
+                    {/* KYC personal details (from kyc_vault) */}
+                    {kycDet && (
+                      <div className="border-t border-gray-100">
+                        <button onClick={() => setExpandedVault(expanded ? null : entry.id)}
+                          className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-50/60 text-[11px] font-semibold text-blue-700">
+                          <span>KYC Personal Details</span>
+                          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                        </button>
+                        {expanded && (
+                          <div className="px-4 py-3 space-y-1.5 text-xs bg-gray-50/40">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-2">Personal</p>
+                            {kycDet.date_of_birth && <div className="flex justify-between"><span className="text-gray-400">Date of Birth</span><span className="text-gray-700">{new Date(kycDet.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span></div>}
+                            {kycDet.gender && <div className="flex justify-between"><span className="text-gray-400">Gender</span><span className="text-gray-700">{kycDet.gender}</span></div>}
+                            {kycDet.nationality && <div className="flex justify-between"><span className="text-gray-400">Nationality</span><span className="text-gray-700">{kycDet.nationality}</span></div>}
+                            {kycDet.maiden_name && <div className="flex justify-between"><span className="text-gray-400">Maiden Name</span><span className="text-gray-700 font-medium">{kycDet.maiden_name}</span></div>}
+                            {kycDet.occupation && <div className="flex justify-between"><span className="text-gray-400">Occupation</span><span className="text-gray-700">{kycDet.occupation}</span></div>}
+
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mt-3 mb-2">Contact</p>
+                            {kycDet.primary_phone && <div className="flex justify-between"><span className="text-gray-400">Primary Phone</span><span className="text-gray-700 font-medium">{kycDet.primary_phone}</span></div>}
+                            {kycDet.secondary_phone && <div className="flex justify-between"><span className="text-gray-400">Secondary Phone</span><span className="text-gray-700">{kycDet.secondary_phone}</span></div>}
+
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mt-3 mb-2">Address</p>
+                            {kycDet.address_line1 && <div className="flex justify-between"><span className="text-gray-400">Line 1</span><span className="text-gray-700">{kycDet.address_line1}</span></div>}
+                            {kycDet.address_line2 && <div className="flex justify-between"><span className="text-gray-400">Line 2</span><span className="text-gray-700">{kycDet.address_line2}</span></div>}
+                            {kycDet.city && <div className="flex justify-between"><span className="text-gray-400">City</span><span className="text-gray-700">{kycDet.city}</span></div>}
+                            {kycDet.state_province && <div className="flex justify-between"><span className="text-gray-400">State / Province</span><span className="text-gray-700">{kycDet.state_province}</span></div>}
+                            {kycDet.postal_code && <div className="flex justify-between"><span className="text-gray-400">Postal Code</span><span className="text-gray-700">{kycDet.postal_code}</span></div>}
+                            {kycDet.country && <div className="flex justify-between"><span className="text-gray-400">Country</span><span className="text-gray-700">{kycDet.country}</span></div>}
+
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mt-3 mb-2">Document</p>
+                            {kycDet.document_type && <div className="flex justify-between"><span className="text-gray-400">Type</span><span className="text-gray-700">{kycDet.document_type}</span></div>}
+                            {kycDet.document_number && <div className="flex justify-between"><span className="text-gray-400">ID Number</span><span className="text-gray-700 font-mono font-bold">{kycDet.document_number}</span></div>}
+                            <div className="flex justify-between"><span className="text-gray-400">Submitted</span><span className="text-gray-500">{new Date(kycDet.submitted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* KYC doc images */}
                     {kycRec && (
                       <div className="border-t border-gray-100 px-4 py-2.5 bg-gray-50/50 space-y-1.5">
-                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">KYC Submission — {kycRec.doc_type}</p>
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">ID Documents — {kycRec.doc_type}</p>
                         <div className="flex gap-2 flex-wrap">
                           {kycRec.doc_front_url && (
                             <button onClick={() => setLightbox(kycRec.doc_front_url)} className="relative group">
                               <img src={kycRec.doc_front_url} alt="Front" className="w-16 h-11 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <Eye size={11} className="text-white" />
-                              </div>
+                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Eye size={11} className="text-white" /></div>
                               <p className="text-[8px] text-gray-400 text-center mt-0.5">Front</p>
                             </button>
                           )}
                           {kycRec.doc_back_url && (
                             <button onClick={() => setLightbox(kycRec.doc_back_url!)} className="relative group">
                               <img src={kycRec.doc_back_url} alt="Back" className="w-16 h-11 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <Eye size={11} className="text-white" />
-                              </div>
+                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Eye size={11} className="text-white" /></div>
                               <p className="text-[8px] text-gray-400 text-center mt-0.5">Back</p>
                             </button>
                           )}
                           {kycRec.selfie_url && (
                             <button onClick={() => setLightbox(kycRec.selfie_url!)} className="relative group">
                               <img src={kycRec.selfie_url} alt="Selfie" className="w-16 h-11 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                <Eye size={11} className="text-white" />
-                              </div>
+                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity"><Eye size={11} className="text-white" /></div>
                               <p className="text-[8px] text-gray-400 text-center mt-0.5">Selfie</p>
                             </button>
                           )}
@@ -1226,9 +1285,9 @@ export default function OpsClient() {
                       </div>
                     )}
 
-                    {!kycRec && (
+                    {!kycRec && !kycDet && (
                       <div className="border-t border-gray-100 px-4 py-2 bg-gray-50/30">
-                        <p className="text-[10px] text-gray-400 italic">No KYC documents submitted yet</p>
+                        <p className="text-[10px] text-gray-400 italic">No KYC submitted yet</p>
                       </div>
                     )}
                   </div>
