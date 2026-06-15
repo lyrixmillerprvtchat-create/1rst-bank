@@ -8,7 +8,7 @@ const DOC_TYPES = [
   'International Passport',
   'National Identity Card',
   "Driver's License",
-  'Voter's Card',
+  "Voter's Card",
   'Residence Permit',
   'Utility Bill',
 ]
