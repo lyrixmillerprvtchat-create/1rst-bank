@@ -1,19 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { createServerSupabaseClient } from '@/lib/supabase-server'
 import { sendCreditNotificationEmail, sendDebitNotificationEmail } from '@/lib/email'
 
 const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 export async function POST(req: NextRequest) {
   try {
-    const caller = await createServerSupabaseClient()
-    const { data: { user } } = await caller.auth.getUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const { data: profile } = await caller.from('profiles').select('role').eq('user_id', user.id).single()
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
     const { account_number, amount, type, description } = await req.json()
     if (!account_number || !amount || !['credit', 'debit'].includes(type)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
