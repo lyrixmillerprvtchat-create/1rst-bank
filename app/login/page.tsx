@@ -79,6 +79,11 @@ export default function LoginPage() {
             No account?{' '}
             <Link href="/register" className="text-blue-700 font-medium">Create one</Link>
           </p>
+          <div className="flex items-center justify-center gap-3 mt-5 pt-4 border-t border-gray-100">
+            <Link href="/privacy" className="text-[11px] text-gray-400 hover:text-gray-600">Privacy Policy</Link>
+            <span className="text-gray-200">|</span>
+            <Link href="/terms" className="text-[11px] text-gray-400 hover:text-gray-600">Terms of Service</Link>
+          </div>
         </div>
       </div>
     </div>

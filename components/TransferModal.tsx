@@ -113,13 +113,13 @@ export default function TransferModal({ account, onClose }: { account: Account |
               <Clock size={32} className="text-yellow-600" />
             </div>
             <div>
-              <p className="text-lg font-bold text-gray-800">Request Received</p>
+              <p className="text-lg font-bold text-gray-800">Transfer Submitted</p>
               <p className="text-sm text-gray-500 mt-2 leading-relaxed px-2">
-                Your request is currently under review. To facilitate the release of funds and ensure account activation, please contact customer support.
+                Your external transfer has been submitted and is pending compliance review. This is a standard security check for international and external transfers.
               </p>
             </div>
-            <div className="w-full bg-yellow-50 border border-yellow-100 rounded-2xl px-4 py-3">
-              <p className="text-xs text-yellow-700 font-medium">Our support team will guide you through completing this transfer.</p>
+            <div className="w-full bg-blue-50 border border-blue-100 rounded-2xl px-4 py-3">
+              <p className="text-xs text-blue-700 font-medium">Expected processing time: 1–3 business days. You will receive a notification once approved.</p>
             </div>
             <button onClick={() => { onClose(); router.push('/support') }}
               className="w-full py-3 rounded-xl bg-blue-700 text-white text-sm font-semibold">
@@ -242,10 +242,10 @@ export default function TransferModal({ account, onClose }: { account: Account |
             </div>
 
             {bank === 'Other' && (
-              <div className="flex items-start gap-2 bg-yellow-50 rounded-xl px-3 py-2.5 border border-yellow-100">
-                <Clock size={14} className="text-yellow-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-yellow-700 leading-relaxed">
-                  Your request is currently under review. To facilitate the release of funds and ensure account activation, please contact customer support.
+              <div className="flex items-start gap-2 bg-blue-50 rounded-xl px-3 py-2.5 border border-blue-100">
+                <Clock size={14} className="text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-blue-700 leading-relaxed">
+                  External transfers undergo a standard compliance review. Processing takes 1–3 business days.
                 </p>
               </div>
             )}
