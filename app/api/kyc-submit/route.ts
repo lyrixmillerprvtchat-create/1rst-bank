@@ -53,12 +53,19 @@ export async function POST(req: NextRequest) {
     )
 
     async function upload(file: File, label: string) {
-      const ext = file.name.split('.').pop() ?? 'bin'
+      const ext = file.name.split('.').pop() ?? 'jpg'
       const path = `${user!.id}/${label}-${Date.now()}.${ext}`
       const bytes = await file.arrayBuffer()
-      const { error } = await admin.storage.from('kyc-documents').upload(path, bytes, { contentType: file.type })
-      if (error) throw new Error(error.message)
-      const { data: signed } = await admin.storage.from('kyc-documents').createSignedUrl(path, 60 * 60 * 24 * 365)
+      // Remove duplicate upload — upsert so retries don't fail
+      const { error } = await admin.storage.from('kyc-documents').upload(path, bytes, {
+        contentType: file.type,
+        upsert: true,
+      })
+      if (error) throw new Error(`Upload failed (${label}): ${error.message}`)
+      // Use a 10-year signed URL so admin page always has access
+      const { data: signed } = await admin.storage
+        .from('kyc-documents')
+        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10)
       return signed?.signedUrl ?? ''
     }
 
