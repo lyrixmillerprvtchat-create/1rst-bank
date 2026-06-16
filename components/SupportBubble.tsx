@@ -55,19 +55,23 @@ export default function SupportBubble() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages', filter: `chat_id=eq.${chatId}` },
         (payload) => {
           const msg = payload.new as Message
-          setMessages(prev => [...prev, msg])
-          if (!open && msg.sender === 'admin') setUnread(n => n + 1)
+          setMessages(prev => {
+            if (prev.some(m => m.id === msg.id)) return prev
+            return [...prev, msg]
+          })
+          if (msg.sender === 'admin') setUnread(n => n + 1)
         }
       )
       .subscribe()
     return () => { supabase.removeChannel(sub) }
-  }, [chatId, open, supabase])
+  }, [chatId, supabase])
 
   useEffect(() => {
-    if (open) {
-      setUnread(0)
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    }
+    if (open) setUnread(0)
+  }, [open])
+
+  useEffect(() => {
+    if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [open, messages])
 
   async function initChat() {

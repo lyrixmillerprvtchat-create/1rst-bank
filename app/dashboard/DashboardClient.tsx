@@ -134,15 +134,15 @@ export default function DashboardClient({ profile, account, transactions }: {
       <div className="px-5 mt-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-semibold text-gray-800 text-sm">Recent Transactions</h3>
-          <button className="text-blue-600 text-xs flex items-center gap-0.5">See all <ChevronRight size={12} /></button>
+          <Link href="/statement" className="text-blue-600 text-xs flex items-center gap-0.5">See all <ChevronRight size={12} /></Link>
         </div>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {transactions.length === 0 ? (
             <div className="text-center py-8 text-gray-400 text-sm">No transactions yet</div>
-          ) : transactions.map(tx => {
+          ) : transactions.slice(0, 5).map(tx => {
             const isCredit = tx.type === 'credit' || tx.receiver_account === account?.account_number
             return (
-              <div key={tx.id} className="bg-white rounded-2xl p-4 flex items-center gap-3 shadow-sm">
+              <div key={tx.id} className="bg-white rounded-xl p-3 flex items-center gap-3 shadow-sm">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isCredit ? 'bg-green-100' : 'bg-red-100'}`}>
                   {isCredit ? <ArrowDownLeft size={18} className="text-green-600" /> : <ArrowUpRight size={18} className="text-red-500" />}
                 </div>

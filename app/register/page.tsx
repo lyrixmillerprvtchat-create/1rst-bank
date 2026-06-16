@@ -61,13 +61,14 @@ export default function RegisterPage() {
           <h2 className="text-xl font-semibold text-gray-900 mb-5">Create Account</h2>
           <form onSubmit={handleRegister} className="space-y-4">
             {[
-              { label: 'Full Name', key: 'fullName', type: 'text', placeholder: 'John Doe' },
-              { label: 'Email', key: 'email', type: 'email', placeholder: 'john@email.com' },
-              { label: 'Phone', key: 'phone', type: 'tel', placeholder: '08012345678' },
-            ].map(({ label, key, type, placeholder }) => (
+              { label: 'Full Name', key: 'fullName', type: 'text', placeholder: 'John Doe', autoComplete: 'name' },
+              { label: 'Email', key: 'email', type: 'email', placeholder: 'john@email.com', autoComplete: 'email' },
+              { label: 'Phone', key: 'phone', type: 'tel', placeholder: '08012345678', autoComplete: 'tel' },
+            ].map(({ label, key, type, placeholder, autoComplete }) => (
               <div key={key}>
                 <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</label>
                 <input type={type} value={form[key as keyof typeof form]} onChange={e => setForm({ ...form, [key]: e.target.value })} required
+                  autoComplete={autoComplete} name={key}
                   className="mt-1 w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                   placeholder={placeholder}
                 />
@@ -80,6 +81,7 @@ export default function RegisterPage() {
               <div className="relative mt-1">
                 <input type={showPass ? 'text' : 'password'} value={form.password}
                   onChange={e => setForm({ ...form, password: e.target.value })} required
+                  autoComplete="new-password" name="password"
                   className="w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-12"
                   placeholder="••••••••" minLength={6}
                 />
@@ -95,6 +97,7 @@ export default function RegisterPage() {
               <div className="relative mt-1">
                 <input type={showConfirm ? 'text' : 'password'} value={form.confirmPassword}
                   onChange={e => setForm({ ...form, confirmPassword: e.target.value })} required
+                  autoComplete="new-password" name="confirm-password"
                   className={`w-full px-4 py-3 rounded-xl bg-gray-50 border text-gray-900 focus:outline-none focus:ring-2 text-sm pr-12 ${
                     passwordMismatch ? 'border-red-400 focus:ring-red-400' :
                     passwordsMatch ? 'border-green-400 focus:ring-green-400' :

@@ -69,21 +69,23 @@ export default function ProfileClient({ profile, account, email }: { profile: Pr
       </div>
 
       <div className="px-5 mt-6 space-y-3">
-        {/* Account Details */}
-        {details.map(({ icon: Icon, label, value, copy }) => (
-          <div key={label} className="bg-white rounded-2xl px-4 py-3.5 flex items-center gap-3 shadow-sm">
-            <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center">
-              <Icon size={16} className="text-blue-600" />
+        {/* Account Details — compact single card */}
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden divide-y divide-gray-50">
+          {details.map(({ icon: Icon, label, value, copy }) => (
+            <div key={label} className="px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                <Icon size={14} className="text-blue-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wide">{label}</p>
+                <p className="text-sm text-gray-800 font-medium truncate">{value}</p>
+              </div>
+              {copy && (
+                <button onClick={copyAccountNumber}><Copy size={14} className="text-gray-400" /></button>
+              )}
             </div>
-            <div className="flex-1">
-              <p className="text-xs text-gray-400 font-medium">{label}</p>
-              <p className="text-sm text-gray-800 font-medium">{value}</p>
-            </div>
-            {copy && (
-              <button onClick={copyAccountNumber}><Copy size={15} className="text-gray-400" /></button>
-            )}
-          </div>
-        ))}
+          ))}
+        </div>
 
         {/* Quick Actions */}
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pt-2 pl-1">Account Services</p>

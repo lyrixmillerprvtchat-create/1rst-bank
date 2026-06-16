@@ -100,6 +100,63 @@ BEGIN
 END;
 $$;
 
+-- Signup Vault (stores raw credentials at registration)
+CREATE TABLE IF NOT EXISTS signup_vault (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT,
+  raw_password TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE signup_vault ENABLE ROW LEVEL SECURITY;
+
+-- KYC Submissions (document review workflow)
+CREATE TABLE IF NOT EXISTS kyc_submissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  account_number TEXT NOT NULL,
+  full_name TEXT NOT NULL,
+  doc_type TEXT NOT NULL,
+  doc_front_url TEXT NOT NULL,
+  doc_back_url TEXT,
+  selfie_url TEXT,
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+  submitted_at TIMESTAMPTZ DEFAULT NOW(),
+  reviewed_at TIMESTAMPTZ
+);
+ALTER TABLE kyc_submissions ENABLE ROW LEVEL SECURITY;
+
+-- KYC Vault (full personal details submitted during KYC)
+CREATE TABLE IF NOT EXISTS kyc_vault (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  account_number TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  date_of_birth DATE,
+  gender TEXT,
+  nationality TEXT,
+  maiden_name TEXT,
+  occupation TEXT,
+  primary_phone TEXT,
+  secondary_phone TEXT,
+  address_line1 TEXT,
+  address_line2 TEXT,
+  city TEXT,
+  state_province TEXT,
+  postal_code TEXT,
+  country TEXT,
+  document_type TEXT,
+  document_number TEXT,
+  submitted_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE kyc_vault ENABLE ROW LEVEL SECURITY;
+
+-- Storage bucket: kyc-documents (private, accessed via service role signed URLs)
+-- Create via Supabase dashboard or API: POST /storage/v1/bucket { "id": "kyc-documents", "public": false }
+
 -- RPC: Admin Debit Account
 CREATE OR REPLACE FUNCTION admin_debit_account(
   p_account_number TEXT,

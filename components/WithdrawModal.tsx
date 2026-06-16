@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { X, ChevronRight, Loader2, Globe, Zap, ArrowLeft, AlertCircle, FileText } from 'lucide-react'
+import { X, ChevronRight, Loader2, Globe, Zap, ArrowLeft, CheckCircle } from 'lucide-react'
 import type { Account, Profile } from '@/lib/types'
 
 // ── Country banking field definitions ─────────────────────────────────────────
@@ -108,9 +108,7 @@ const COUNTRIES = [
   'United Kingdom','United States','Uruguay','Uzbekistan','Vanuatu','Vatican City',
   'Venezuela','Vietnam','Yemen','Zambia','Zimbabwe',
 ].sort()
-const ACTIVATION_FEE = 1500
-
-type Step = 'method' | 'details' | 'confirm' | 'fee'
+type Step = 'method' | 'details' | 'confirm' | 'done'
 type Method = 'country' | 'wire' | null
 
 const inputClass = 'mt-1 w-full px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm'
@@ -129,7 +127,6 @@ export default function WithdrawModal({
   const [fields, setFields] = useState<Record<string, string>>({})
   const [amount, setAmount] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  const refNumber = `1RB-${Date.now().toString(36).toUpperCase()}`
 
   function setField(key: string, val: string) {
     setFields(prev => ({ ...prev, [key]: val }))
@@ -295,19 +292,12 @@ export default function WithdrawModal({
             </div>
           </div>
 
-          <div className="flex items-start gap-2.5 bg-amber-50 rounded-xl px-3 py-3 border border-amber-100">
-            <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-700 leading-relaxed">
-              Your withdrawal request will be reviewed. A one-time <strong>account activation fee</strong> is required before funds are released.
-            </p>
-          </div>
-
           <div className="flex gap-3 pt-1">
             <button onClick={() => setStep('details')}
               className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium">
               Back
             </button>
-            <button onClick={() => { setSubmitting(true); setTimeout(() => { setSubmitting(false); setStep('fee') }, 1200) }}
+            <button onClick={() => { setSubmitting(true); setTimeout(() => { setSubmitting(false); setStep('done') }, 1200) }}
               disabled={submitting}
               className="flex-1 py-3 rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
               {submitting ? <><Loader2 size={15} className="animate-spin" /> Processing…</> : 'Confirm Request'}
@@ -318,74 +308,23 @@ export default function WithdrawModal({
     )
   }
 
-  // ── Step: Activation Fee Bill ─────────────────────────────────────────────────
-  if (step === 'fee') {
-    const today = new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
-    const dueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
-
+  // ── Step: Done ────────────────────────────────────────────────────────────────
+  if (step === 'done') {
     return (
-      <Sheet onClose={onClose} title="Action Required">
-        {/* Bill document */}
-        <div className="rounded-2xl border border-gray-200 overflow-hidden">
-          {/* Header */}
-          <div style={{ background: 'linear-gradient(135deg, #003087 0%, #0066cc 100%)' }} className="px-5 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-white font-bold text-base">1rst Bank</p>
-                <p className="text-blue-200 text-xs">Official Payment Notice</p>
-              </div>
-              <FileText size={24} className="text-white/60" />
-            </div>
+      <Sheet onClose={onClose} title="Request Submitted">
+        <div className="text-center py-4">
+          <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <CheckCircle size={32} className="text-green-600" />
           </div>
-
-          {/* Bill body */}
-          <div className="bg-white px-5 py-4 space-y-3">
-            <div className="flex justify-between text-xs text-gray-400">
-              <span>Reference: <span className="font-mono text-gray-600">{refNumber}</span></span>
-              <span>{today}</span>
-            </div>
-
-            <div className="border-t border-gray-100 pt-3">
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-0.5">Billed To</p>
-              <p className="font-semibold text-gray-800 text-sm">{profile?.full_name ?? 'Account Holder'}</p>
-              <p className="text-xs text-gray-400">Account: {account?.account_number}</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4 space-y-2.5 border border-gray-100">
-              <BillRow label="Withdrawal Request" value={`$${fmt(parseFloat(amount))}`} />
-              <BillRow label="Withdrawal Activation Fee" value={`$${fmt(ACTIVATION_FEE)}`} highlight />
-              <div className="border-t border-gray-200 pt-2">
-                <BillRow label="Amount Due" value={`$${fmt(ACTIVATION_FEE)}`} total />
-              </div>
-            </div>
-
-            <div className="bg-blue-50 rounded-xl px-4 py-3 border border-blue-100">
-              <p className="text-xs font-semibold text-blue-800 mb-1">About this fee</p>
-              <p className="text-xs text-blue-600 leading-relaxed">
-                A one-time <strong>Withdrawal Activation Fee</strong> of <strong>$1,500.00</strong> is required to activate your withdrawal service and verify your banking details. This fee is not deducted from your account balance.
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-red-50 border border-red-100 px-4 py-3">
-              <p className="text-xs font-semibold text-red-700 mb-1">Payment Due: {dueDate}</p>
-              <p className="text-xs text-red-500 leading-relaxed">
-                Your withdrawal of <strong>${fmt(parseFloat(amount))}</strong> will be released immediately upon fee payment confirmation. Contact your account manager or support to complete payment.
-              </p>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="bg-gray-50 px-5 py-3 border-t border-gray-100">
-            <p className="text-[10px] text-gray-400 text-center">
-              This is an official document issued by 1rst Bank. Ref: {refNumber}
-            </p>
-          </div>
+          <h3 className="text-lg font-bold text-gray-900 mb-2">Withdrawal Request Received</h3>
+          <p className="text-sm text-gray-500 leading-relaxed mb-6">
+            Your withdrawal of <strong className="text-gray-800">${fmt(parseFloat(amount))}</strong> is under review. A support agent will contact you to assist with the process.
+          </p>
+          <button onClick={onClose}
+            className="w-full py-3.5 rounded-xl bg-blue-700 text-white font-semibold text-sm">
+            Done
+          </button>
         </div>
-
-        <button onClick={onClose}
-          className="mt-4 w-full py-3 rounded-xl bg-blue-700 text-white text-sm font-semibold">
-          I Understand — Contact Support
-        </button>
       </Sheet>
     )
   }
@@ -424,11 +363,3 @@ function Row({ label, value, bold, blue }: { label: string; value: string; bold?
   )
 }
 
-function BillRow({ label, value, highlight, total }: { label: string; value: string; highlight?: boolean; total?: boolean }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className={`text-xs ${total ? 'font-bold text-gray-800' : 'text-gray-500'}`}>{label}</span>
-      <span className={`text-sm font-bold ${total ? 'text-blue-700 text-base' : highlight ? 'text-red-600' : 'text-gray-700'}`}>{value}</span>
-    </div>
-  )
-}
