@@ -135,6 +135,15 @@ export default function SupportBubble() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
+  const [chatView, setChatView] = useState(false)
+
+  function handleBubbleOpen() {
+    setOpen(o => {
+      if (!o) setChatView(false)
+      return !o
+    })
+  }
+
   const isAdminPage = ['/admin-console', '/ops', '/manager', '/support'].some(p => pathname.startsWith(p))
   if (!userId || !supabase || isAdminPage) return null
 
@@ -161,62 +170,86 @@ export default function SupportBubble() {
               </button>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
-              {messages.length === 0 && (
-                <div className="text-center text-gray-400 text-xs mt-8">
-                  <MessageCircle size={28} className="mx-auto mb-2 opacity-40" />
-                  <p>Hi! How can we help you today?</p>
+            {!chatView ? (
+              /* Contact info screen */
+              <div className="flex-1 flex flex-col items-center justify-center px-6 text-center bg-gray-50">
+                <div className="w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                  <MessageCircle size={28} className="text-blue-700" />
                 </div>
-              )}
-              {messages.map(m => (
-                <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                    m.sender === 'user'
-                      ? 'bg-blue-700 text-white rounded-br-sm'
-                      : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
-                  }`}>
-                    {m.sender === 'admin' && <p className="text-blue-600 font-semibold text-[10px] mb-0.5">Support Agent</p>}
-                    {m.attachment_url && m.attachment_type === 'image' && (
-                      <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 140 }} onClick={() => setLightbox(m.attachment_url!)} />
-                    )}
-                    {m.attachment_url && m.attachment_type === 'document' && (
-                      <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1 underline text-[10px] ${m.sender === 'user' ? 'text-blue-200' : 'text-blue-700'}`}>
-                        <FileText size={11} /> View Document
-                      </a>
-                    )}
-                    {m.message && m.message}
-                  </div>
+                <p className="text-sm font-semibold text-gray-800 mb-2">Contact Customer Support</p>
+                <p className="text-xs text-gray-500 leading-relaxed mb-1">
+                  To speak with a customer support agent contact support at
+                </p>
+                <a href="mailto:1rstbanksupport@gmail.com" className="text-sm font-bold text-blue-700 underline break-all mb-6">
+                  1rstbanksupport@gmail.com
+                </a>
+                <button
+                  onClick={() => setChatView(true)}
+                  className="w-full py-3 rounded-xl border border-gray-200 bg-white text-xs font-semibold text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  Couldn&apos;t reach support / No response yet
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
+                  {messages.length === 0 && (
+                    <div className="text-center text-gray-400 text-xs mt-8">
+                      <MessageCircle size={28} className="mx-auto mb-2 opacity-40" />
+                      <p>Hi! How can we help you today?</p>
+                    </div>
+                  )}
+                  {messages.map(m => (
+                    <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                        m.sender === 'user'
+                          ? 'bg-blue-700 text-white rounded-br-sm'
+                          : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
+                      }`}>
+                        {m.sender === 'admin' && <p className="text-blue-600 font-semibold text-[10px] mb-0.5">Support Agent</p>}
+                        {m.attachment_url && m.attachment_type === 'image' && (
+                          <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 140 }} onClick={() => setLightbox(m.attachment_url!)} />
+                        )}
+                        {m.attachment_url && m.attachment_type === 'document' && (
+                          <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1 underline text-[10px] ${m.sender === 'user' ? 'text-blue-200' : 'text-blue-700'}`}>
+                            <FileText size={11} /> View Document
+                          </a>
+                        )}
+                        {m.message && m.message}
+                      </div>
+                    </div>
+                  ))}
+                  <div ref={bottomRef} />
                 </div>
-              ))}
-              <div ref={bottomRef} />
-            </div>
 
-            {/* Input */}
-            <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2 items-center shrink-0">
-              <input hidden ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleFileUpload} />
-              <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
-                className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 disabled:opacity-40 flex-shrink-0">
-                {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
-              </button>
-              <input
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder="Type a message..."
-                className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <button onClick={sendMessage} disabled={!input.trim() || sending}
-                className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40 flex-shrink-0">
-                {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-              </button>
-            </div>
+                {/* Input */}
+                <div className="px-3 py-3 border-t border-gray-100 bg-white flex gap-2 items-center shrink-0">
+                  <input hidden ref={fileInputRef} type="file" accept="image/*,.pdf,.doc,.docx" onChange={handleFileUpload} />
+                  <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
+                    className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 hover:bg-gray-200 disabled:opacity-40 flex-shrink-0">
+                    {uploading ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+                  </button>
+                  <input
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                    placeholder="Type a message..."
+                    className="flex-1 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <button onClick={sendMessage} disabled={!input.trim() || sending}
+                    className="w-9 h-9 rounded-xl bg-blue-700 flex items-center justify-center text-white disabled:opacity-40 flex-shrink-0">
+                    {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
 
         {/* Bubble Button */}
         <button
-          onClick={() => setOpen(o => !o)}
+          onClick={handleBubbleOpen}
           className="w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-white relative transition-transform hover:scale-105"
           style={{ background: 'linear-gradient(135deg, #003087, #0066cc)' }}
         >
