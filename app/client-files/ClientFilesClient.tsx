@@ -92,6 +92,7 @@ export default function ClientFilesClient() {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [actionId, setActionId] = useState<string | null>(null)
+  const [directKycId, setDirectKycId] = useState<string | null>(null)
 
   useEffect(() => {
     async function check() {
@@ -163,6 +164,24 @@ export default function ClientFilesClient() {
       }
     }))
     setActionId(null)
+  }
+
+  async function setDirectKyc(accountNumber: string, kyc_status: 'approved' | 'rejected') {
+    setDirectKycId(accountNumber)
+    const res = await fetch('/api/admin/set-kyc', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_number: accountNumber, kyc_status }),
+    })
+    if (res.ok) {
+      setClients(prev => prev.map(c =>
+        c.account_number === accountNumber ? { ...c, kyc_status } : c
+      ))
+    } else {
+      const d = await res.json()
+      alert(d.error ?? 'KYC update failed')
+    }
+    setDirectKycId(null)
   }
 
   const filtered = useMemo(() => {
@@ -352,6 +371,40 @@ export default function ClientFilesClient() {
                       <InfoRow label="Account Status" value={client.status} />
                       <InfoRow label="Joined" value={new Date(client.created_at).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })} />
                       <InfoRow label="Balance" value={fmt(client.balance)} />
+                    </div>
+
+                    {/* ── DIRECT KYC CONTROLS ── */}
+                    <div className="mt-3">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">KYC Status Control</p>
+                      {client.kyc_status === 'approved' ? (
+                        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-3 py-2.5">
+                          <CheckCircle size={14} className="text-emerald-600 shrink-0" />
+                          <p className="text-xs text-emerald-700 font-medium">KYC Approved — account fully verified</p>
+                          <button
+                            onClick={() => setDirectKyc(client.account_number, 'rejected')}
+                            disabled={directKycId === client.account_number}
+                            className="ml-auto text-[10px] text-red-500 underline disabled:opacity-40">
+                            Revoke
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setDirectKyc(client.account_number, 'approved')}
+                            disabled={directKycId === client.account_number}
+                            className="flex-1 py-2 rounded-xl bg-emerald-600 text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                            {directKycId === client.account_number ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle size={12} />}
+                            Approve KYC
+                          </button>
+                          <button
+                            onClick={() => setDirectKyc(client.account_number, 'rejected')}
+                            disabled={directKycId === client.account_number}
+                            className="flex-1 py-2 rounded-xl bg-red-500 text-white text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-50">
+                            {directKycId === client.account_number ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={12} />}
+                            Reject KYC
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
 
