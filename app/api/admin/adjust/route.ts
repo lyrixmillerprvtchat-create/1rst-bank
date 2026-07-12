@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendCreditNotificationEmail, sendDebitNotificationEmail } from '@/lib/email'
+import { requireAdmin } from '@/lib/require-admin'
 
 const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await requireAdmin()
+    if (denied) return denied
+
     const { account_number, amount, type, description } = await req.json()
     if (!account_number || !amount || !['credit', 'debit'].includes(type)) {
       return NextResponse.json({ error: 'Invalid request' }, { status: 400 })

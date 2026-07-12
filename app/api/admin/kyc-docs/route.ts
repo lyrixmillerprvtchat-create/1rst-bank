@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/require-admin'
 
 const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 export async function GET() {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const admin = createClient(
     clean(process.env.NEXT_PUBLIC_SUPABASE_URL),
     clean(process.env.SUPABASE_SERVICE_ROLE_KEY),
@@ -20,6 +24,9 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const { id, status } = await req.json()
   if (!id || !['approved', 'rejected'].includes(status)) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 })

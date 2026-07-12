@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/require-admin'
 
 const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 export async function POST(req: Request) {
+  const denied = await requireAdmin()
+  if (denied) return denied
+
   const { account_number, status } = await req.json()
 
   const allowed = ['active', 'suspended', 'frozen']
