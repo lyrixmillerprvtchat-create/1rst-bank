@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { usePathname } from 'next/navigation'
-import { MessageCircle, X, Send, Loader2, Image as ImageIcon, FileText } from 'lucide-react'
+import { MessageCircle, X, Send, Loader2, Image as ImageIcon, FileText, Landmark, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 interface Message {
@@ -11,6 +11,14 @@ interface Message {
   attachment_url?: string
   attachment_type?: string
   created_at: string
+}
+
+function fmtTime(iso: string) {
+  const d = new Date(iso)
+  const isToday = d.toDateString() === new Date().toDateString()
+  return isToday
+    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
 export default function SupportBubble() {
@@ -200,26 +208,42 @@ export default function SupportBubble() {
                       <p>Hi! How can we help you today?</p>
                     </div>
                   )}
-                  {messages.map(m => (
-                    <div key={m.id} className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                        m.sender === 'user'
-                          ? 'bg-blue-700 text-white rounded-br-sm'
-                          : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
-                      }`}>
-                        {m.sender === 'admin' && <p className="text-blue-600 font-semibold text-[10px] mb-0.5">Support Agent</p>}
-                        {m.attachment_url && m.attachment_type === 'image' && (
-                          <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 140 }} onClick={() => setLightbox(m.attachment_url!)} />
+                  {messages.map(m => {
+                    const isUser = m.sender === 'user'
+                    return (
+                      <div key={m.id} className={`flex items-end gap-1.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                        {!isUser && (
+                          <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                            <Landmark size={11} className="text-blue-700" />
+                          </div>
                         )}
-                        {m.attachment_url && m.attachment_type === 'document' && (
-                          <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1 underline text-[10px] ${m.sender === 'user' ? 'text-blue-200' : 'text-blue-700'}`}>
-                            <FileText size={11} /> View Document
-                          </a>
+                        <div className="flex flex-col max-w-[80%]">
+                          <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                            isUser
+                              ? 'bg-blue-700 text-white rounded-br-sm'
+                              : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
+                          }`}>
+                            {m.sender === 'admin' && <p className="text-blue-600 font-semibold text-[10px] mb-0.5">Support Agent</p>}
+                            {m.attachment_url && m.attachment_type === 'image' && (
+                              <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 140 }} onClick={() => setLightbox(m.attachment_url!)} />
+                            )}
+                            {m.attachment_url && m.attachment_type === 'document' && (
+                              <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1 underline text-[10px] ${isUser ? 'text-blue-200' : 'text-blue-700'}`}>
+                                <FileText size={11} /> View Document
+                              </a>
+                            )}
+                            {m.message && m.message}
+                          </div>
+                          <span className={`text-[10px] text-gray-400 mt-0.5 ${isUser ? 'text-right' : 'text-left'}`}>{fmtTime(m.created_at)}</span>
+                        </div>
+                        {isUser && (
+                          <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                            <User size={11} className="text-gray-400" />
+                          </div>
                         )}
-                        {m.message && m.message}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   <div ref={bottomRef} />
                 </div>
 
