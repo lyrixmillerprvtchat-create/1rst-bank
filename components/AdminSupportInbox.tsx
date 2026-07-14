@@ -1,9 +1,9 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Send, Loader2, User, ChevronLeft, Image as ImageIcon, FileText } from 'lucide-react'
+import { MessageSquare, Send, Loader2, User, ChevronLeft, Image as ImageIcon, FileText, Landmark } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
-interface Chat { id: string; user_id: string; status: string; created_at: string; latest?: string; full_name?: string }
+interface Chat { id: string; user_id: string; status: string; created_at: string; latest?: string; latestAt?: string; full_name?: string }
 interface Message {
   id: string
   sender: 'user' | 'admin'
@@ -11,6 +11,14 @@ interface Message {
   attachment_url?: string
   attachment_type?: string
   created_at: string
+}
+
+function fmtTime(iso: string) {
+  const d = new Date(iso)
+  const isToday = d.toDateString() === new Date().toDateString()
+  return isToday
+    ? d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+    : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
 export default function AdminSupportInbox() {
@@ -57,10 +65,11 @@ export default function AdminSupportInbox() {
 
     const enriched = await Promise.all(chatData.map(async (chat) => {
       const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', chat.user_id).single()
-      const { data: lastMsg } = await supabase.from('support_messages').select('message, attachment_type').eq('chat_id', chat.id).order('created_at', { ascending: false }).limit(1).single()
+      const { data: lastMsg } = await supabase.from('support_messages').select('message, attachment_type, created_at').eq('chat_id', chat.id).order('created_at', { ascending: false }).limit(1).single()
       const latest = lastMsg?.attachment_type ? `[${lastMsg.attachment_type}]` : (lastMsg?.message ?? 'No messages yet')
-      return { ...chat, full_name: profile?.full_name ?? 'Unknown', latest }
+      return { ...chat, full_name: profile?.full_name ?? 'Unknown', latest, latestAt: lastMsg?.created_at ?? chat.created_at }
     }))
+    enriched.sort((a, b) => new Date(b.latestAt!).getTime() - new Date(a.latestAt!).getTime())
     setChats(enriched)
   }
 
@@ -132,7 +141,8 @@ export default function AdminSupportInbox() {
                     <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center">
                       <User size={12} className="text-blue-700" />
                     </div>
-                    <span className="text-xs font-semibold text-gray-800 truncate">{chat.full_name}</span>
+                    <span className="text-xs font-semibold text-gray-800 truncate flex-1">{chat.full_name}</span>
+                    {chat.latestAt && <span className="text-[10px] text-gray-400 flex-shrink-0">{fmtTime(chat.latestAt)}</span>}
                   </div>
                   <p className="text-xs text-gray-400 truncate pl-9">{chat.latest}</p>
                 </button>
@@ -157,25 +167,41 @@ export default function AdminSupportInbox() {
               </div>
 
               <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 bg-gray-50">
-                {messages.map(m => (
-                  <div key={m.id} className={`flex ${m.sender === 'admin' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-xs leading-relaxed ${
-                      m.sender === 'admin'
-                        ? 'bg-blue-700 text-white rounded-br-sm'
-                        : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
-                    }`}>
-                      {m.attachment_url && m.attachment_type === 'image' && (
-                        <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 160 }} onClick={() => setLightbox(m.attachment_url!)} />
+                {messages.map(m => {
+                  const isAdmin = m.sender === 'admin'
+                  return (
+                    <div key={m.id} className={`flex items-end gap-1.5 ${isAdmin ? 'justify-end' : 'justify-start'}`}>
+                      {!isAdmin && (
+                        <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                          <User size={11} className="text-gray-400" />
+                        </div>
                       )}
-                      {m.attachment_url && m.attachment_type === 'document' && (
-                        <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1.5 underline text-xs ${m.sender === 'admin' ? 'text-blue-200' : 'text-blue-700'}`}>
-                          <FileText size={12} /> View Document
-                        </a>
+                      <div className="flex flex-col max-w-[75%]">
+                        <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                          isAdmin
+                            ? 'bg-blue-700 text-white rounded-br-sm'
+                            : 'bg-white text-gray-800 shadow-sm border border-gray-100 rounded-bl-sm'
+                        }`}>
+                          {m.attachment_url && m.attachment_type === 'image' && (
+                            <img src={m.attachment_url} alt="attachment" className="rounded-lg max-w-full mb-1 cursor-pointer" style={{ maxHeight: 160 }} onClick={() => setLightbox(m.attachment_url!)} />
+                          )}
+                          {m.attachment_url && m.attachment_type === 'document' && (
+                            <a href={m.attachment_url} target="_blank" rel="noopener noreferrer" className={`flex items-center gap-1.5 underline text-xs ${isAdmin ? 'text-blue-200' : 'text-blue-700'}`}>
+                              <FileText size={12} /> View Document
+                            </a>
+                          )}
+                          {m.message && m.message}
+                        </div>
+                        <span className={`text-[10px] text-gray-400 mt-0.5 ${isAdmin ? 'text-right' : 'text-left'}`}>{fmtTime(m.created_at)}</span>
+                      </div>
+                      {isAdmin && (
+                        <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Landmark size={11} className="text-blue-700" />
+                        </div>
                       )}
-                      {m.message && m.message}
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
                 <div ref={bottomRef} />
               </div>
 
