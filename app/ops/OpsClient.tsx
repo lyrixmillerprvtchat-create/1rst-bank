@@ -6,7 +6,8 @@ import {
   ArrowLeftRight, Shield, Search, Eye, EyeOff,
   Users, UserPlus, XCircle, ArrowDownLeft,
   ChevronDown, ChevronUp, FileText, Image as ImageIcon,
-  MessageSquare, Send, User, ChevronLeft, BadgeCheck
+  MessageSquare, Send, User, ChevronLeft, BadgeCheck,
+  KeyRound, Copy, X
 } from 'lucide-react'
 
 interface Client {
@@ -110,6 +111,12 @@ export default function OpsClient() {
   const [adjustState, setAdjustState] = useState<Record<string, { amount: string; working: boolean; msg: string }>>({})
   const [statusActionId, setStatusActionId] = useState<string | null>(null)
   const [kycActionId, setKycActionId] = useState<string | null>(null)
+
+  // Reset password
+  const [resetActionId, setResetActionId] = useState<string | null>(null)
+  const [resetResult, setResetResult] = useState<{ email: string; full_name: string; resetLink: string } | null>(null)
+  const [resetError, setResetError] = useState('')
+  const [copied, setCopied] = useState(false)
 
   const [expandedClient, setExpandedClient] = useState<string | null>(null)
   const [clientTxns, setClientTxns] = useState<Record<string, Transaction[]>>({})
@@ -349,6 +356,25 @@ export default function OpsClient() {
       alert(d.error ?? 'Status update failed')
     }
     setStatusActionId(null)
+  }
+
+  async function handleResetPassword(client: Client) {
+    setResetActionId(client.account_number)
+    setResetError('')
+    setCopied(false)
+    const res = await fetch('/api/admin/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ account_number: client.account_number }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setResetError(data.error ?? 'Failed to generate reset link')
+      setResetActionId(null)
+      return
+    }
+    setResetResult(data)
+    setResetActionId(null)
   }
 
   async function toggleExpand(acc: string) {
@@ -683,6 +709,28 @@ export default function OpsClient() {
 
                     {isExpanded && (
                       <div className="border-t border-gray-100 rounded-xl overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 bg-gray-50/50">
+                          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full ${
+                            (client.status ?? 'active') === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>
+                            {(client.status ?? 'active') === 'active' ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleSetStatus(client, (client.status ?? 'active') === 'active' ? 'suspended' : 'active')}
+                              disabled={statusActionId === client.account_number}
+                              className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg disabled:opacity-50 ${
+                                (client.status ?? 'active') === 'active' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-700'}`}>
+                              {statusActionId === client.account_number
+                                ? <Loader2 size={10} className="animate-spin" />
+                                : (client.status ?? 'active') === 'active' ? <XCircle size={10} /> : <CheckCircle size={10} />}
+                              {(client.status ?? 'active') === 'active' ? 'Mark Inactive' : 'Mark Active'}
+                            </button>
+                            <button onClick={() => handleResetPassword(client)}
+                              disabled={resetActionId === client.account_number}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-purple-50 text-purple-700 disabled:opacity-50">
+                              {resetActionId === client.account_number ? <Loader2 size={10} className="animate-spin" /> : <KeyRound size={10} />} Reset Password
+                            </button>
+                          </div>
+                        </div>
                         {isTxnLoading && (
                           <div className="flex justify-center py-5"><Loader2 size={16} className="animate-spin text-blue-600" /></div>
                         )}
@@ -1040,6 +1088,46 @@ export default function OpsClient() {
         )}
 
       </div>
+
+      {/* Reset Password Error Toast */}
+      {resetError && (
+        <div className="fixed bottom-5 left-5 right-5 bg-red-50 border border-red-200 text-red-600 text-xs font-medium rounded-xl px-4 py-3 flex items-center justify-between shadow-lg z-50">
+          {resetError}
+          <button onClick={() => setResetError('')}><X size={14} /></button>
+        </div>
+      )}
+
+      {/* Reset Password Result Modal */}
+      {resetResult && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50" onClick={() => setResetResult(null)}>
+          <div className="bg-white rounded-t-3xl p-5 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center">
+                  <KeyRound size={16} className="text-purple-700" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">Password Reset Link</p>
+                  <p className="text-xs text-gray-400">{resetResult.full_name} · {resetResult.email}</p>
+                </div>
+              </div>
+              <button onClick={() => setResetResult(null)}><X size={18} className="text-gray-400" /></button>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-600 break-all font-mono">
+              {resetResult.resetLink}
+            </div>
+            <p className="text-[11px] text-gray-400">Send this link to the client. It lets them set a new password and expires per your Supabase Auth settings.</p>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(resetResult.resetLink)
+                setCopied(true)
+              }}
+              className="w-full py-3 rounded-xl bg-purple-700 text-white text-sm font-semibold flex items-center justify-center gap-2">
+              {copied ? <CheckCircle size={16} /> : <Copy size={16} />} {copied ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

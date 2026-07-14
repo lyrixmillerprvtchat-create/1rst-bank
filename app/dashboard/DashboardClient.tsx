@@ -51,7 +51,14 @@ export default function DashboardClient({ profile, account, transactions }: {
 
         {/* Balance Card */}
         <div className="bg-white/15 backdrop-blur rounded-2xl p-5 border border-white/20">
-          <p className="text-blue-200 text-xs font-medium mb-1">Total Balance</p>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-blue-200 text-xs font-medium">Total Balance</p>
+            {profile?.status && profile.status !== 'active' && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-red-100 bg-red-500/80 px-2 py-0.5 rounded-full">
+                <AlertTriangle size={10} /> Account Inactive
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 mb-4">
             <h3 className="text-white text-3xl font-bold">
               {showBalance ? `$${balance.toLocaleString('en-US', { minimumFractionDigits: 2 })}` : '••••••'}
