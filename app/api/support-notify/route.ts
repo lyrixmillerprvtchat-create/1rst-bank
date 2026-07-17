@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    sendSupportMessageAlert({ userName: userName || 'A customer', message, chatId }).catch(() => {})
+    await sendSupportMessageAlert({ userName: userName || 'A customer', message, chatId })
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
