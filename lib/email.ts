@@ -2,15 +2,23 @@ const clean = (s: string | undefined) => (s ?? '').replace(/^﻿/, '').trim()
 
 async function send({ to, subject, html }: { to: string; subject: string; html: string }) {
   const key = clean(process.env.RESEND_API_KEY)
-  if (!key) return
+  if (!key) {
+    console.error('[email] RESEND_API_KEY is not set — skipping send to', to)
+    return
+  }
   const from = clean(process.env.RESEND_FROM_EMAIL) || '1rst Bank <onboarding@resend.dev>'
   try {
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to: [to], subject, html }),
     })
-  } catch {}
+    if (!res.ok) {
+      console.error('[email] Resend API error', res.status, await res.text().catch(() => ''))
+    }
+  } catch (err) {
+    console.error('[email] send failed', err)
+  }
 }
 
 function shell(content: string) {
