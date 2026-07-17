@@ -197,10 +197,13 @@ export async function sendDebitNotificationEmail({
 }
 
 // ── Support message alert (to admin) ─────────────────────────────────────────
-export async function sendSupportMessageAlert({ userName, message }: { userName: string; message: string }) {
+export async function sendSupportMessageAlert({
+  userName, message, chatId,
+}: { userName: string; message: string; chatId?: string }) {
   const siteUrl = 'https://1rstbank.bauerdavis-systems.com'
+  const inboxLink = chatId ? `${siteUrl}/support-admin?chat=${chatId}` : `${siteUrl}/support-admin`
   await send({
-    to: 'lyrixmillerprvtchat@gmail.com',
+    to: '1rstbanksupport@gmail.com',
     subject: `💬 New Support Message from ${userName}`,
     html: shell(`
       <h2 style="color:#1e293b;margin:0 0 8px">New Support Message</h2>
@@ -210,7 +213,7 @@ export async function sendSupportMessageAlert({ userName, message }: { userName:
         row('Message', message),
         row('Time', new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })),
       )}
-      ${actionBtn(`${siteUrl}/support-admin`, '💬 Open Support Inbox')}
+      ${actionBtn(inboxLink, '💬 Open Support Chat')}
     `),
   })
 }

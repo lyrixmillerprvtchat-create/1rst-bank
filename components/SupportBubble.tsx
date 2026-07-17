@@ -29,6 +29,7 @@ export default function SupportBubble() {
   const [sending, setSending] = useState(false)
   const [chatId, setChatId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string>('A customer')
   const [unread, setUnread] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -41,8 +42,12 @@ export default function SupportBubble() {
 
   useEffect(() => {
     if (!supabase) return
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id)
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (data.user) {
+        setUserId(data.user.id)
+        const { data: profile } = await supabase.from('profiles').select('full_name').eq('user_id', data.user.id).single()
+        if (profile?.full_name) setUserName(profile.full_name)
+      }
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUserId(session?.user?.id ?? null)
@@ -116,9 +121,15 @@ export default function SupportBubble() {
   async function sendMessage() {
     if (!input.trim() || !chatId || !supabase) return
     setSending(true)
-    await supabase.from('support_messages').insert({ chat_id: chatId, sender: 'user', message: input.trim() })
+    const message = input.trim()
+    await supabase.from('support_messages').insert({ chat_id: chatId, sender: 'user', message })
     setInput('')
     setSending(false)
+    fetch('/api/support-notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message, userName }),
+    }).catch(() => {})
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -138,6 +149,11 @@ export default function SupportBubble() {
         attachment_url: data.url,
         attachment_type: data.type,
       })
+      fetch('/api/support-notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId, message: `Sent a${data.type === 'image' ? 'n image' : ' document'}`, userName }),
+      }).catch(() => {})
     }
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ''

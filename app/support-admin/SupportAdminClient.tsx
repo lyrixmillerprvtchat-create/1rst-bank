@@ -6,7 +6,7 @@ import AdminSupportInbox from '@/components/AdminSupportInbox'
 
 type Screen = 'loading' | 'login' | 'inbox'
 
-export default function SupportAdminClient() {
+export default function SupportAdminClient({ initialChatId }: { initialChatId?: string }) {
   const [screen, setScreen] = useState<Screen>('loading')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
@@ -97,7 +97,7 @@ export default function SupportAdminClient() {
         </div>
       </div>
       <div className="flex-1 p-4 max-w-4xl mx-auto w-full">
-        <AdminSupportInbox />
+        <AdminSupportInbox initialChatId={initialChatId} />
       </div>
     </div>
   )

@@ -21,9 +21,10 @@ function fmtTime(iso: string) {
     : d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' }) + ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 }
 
-export default function AdminSupportInbox() {
+export default function AdminSupportInbox({ initialChatId }: { initialChatId?: string } = {}) {
   const [chats, setChats] = useState<Chat[]>([])
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
+  const autoSelectedRef = useRef(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [reply, setReply] = useState('')
   const [sending, setSending] = useState(false)
@@ -71,6 +72,14 @@ export default function AdminSupportInbox() {
     }))
     enriched.sort((a, b) => new Date(b.latestAt!).getTime() - new Date(a.latestAt!).getTime())
     setChats(enriched)
+
+    if (initialChatId && !autoSelectedRef.current) {
+      const match = enriched.find(c => c.id === initialChatId)
+      if (match) {
+        autoSelectedRef.current = true
+        setSelectedChat(match)
+      }
+    }
   }
 
   async function loadMessages(chatId: string) {

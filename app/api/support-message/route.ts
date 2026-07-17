@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-    sendSupportMessageAlert({ userName: userName || 'A customer', message }).catch(() => {})
+    sendSupportMessageAlert({ userName: userName || 'A customer', message, chatId }).catch(() => {})
 
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
