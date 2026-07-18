@@ -13,11 +13,14 @@ async function send({ to, subject, html }: { to: string; subject: string; html: 
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ from, to: [to], subject, html }),
     })
+    const body = await res.text().catch(() => '')
     if (!res.ok) {
-      console.error('[email] Resend API error', res.status, await res.text().catch(() => ''))
+      console.error('[email] Resend API error', res.status, 'from=', from, 'to=', to, body)
+    } else {
+      console.log('[email] Resend accepted', res.status, 'from=', from, 'to=', to, body)
     }
   } catch (err) {
-    console.error('[email] send failed', err)
+    console.error('[email] send failed', 'from=', from, 'to=', to, err)
   }
 }
 
