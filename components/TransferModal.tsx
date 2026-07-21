@@ -78,11 +78,13 @@ export default function TransferModal({ account, onClose }: { account: Account |
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-end">
-      <div className="bg-white w-full max-w-[430px] mx-auto rounded-t-3xl p-6 pb-10">
-        <div className="flex justify-between items-center mb-6">
+      <div className="bg-white w-full max-w-[430px] mx-auto rounded-t-3xl max-h-[90vh] flex flex-col">
+        <div className="flex justify-between items-center px-6 pt-6 pb-4 shrink-0">
           <h3 className="text-lg font-semibold text-gray-900">Transfer Money</h3>
           <button onClick={onClose}><X size={22} className="text-gray-400" /></button>
         </div>
+
+        <div className="overflow-y-auto px-6 pb-10">
 
         {/* SUCCESS */}
         {step === 'success' && (
@@ -266,6 +268,7 @@ export default function TransferModal({ account, onClose }: { account: Account |
             </div>
           </div>
         )}
+        </div>
       </div>
     </div>
   )
