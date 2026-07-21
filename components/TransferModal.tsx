@@ -252,16 +252,16 @@ export default function TransferModal({ account, onClose }: { account: Account |
 
             {error && <p className="text-red-500 text-xs">{error}</p>}
 
-            <div className="flex gap-3">
-              <button onClick={() => setStep('form')}
-                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium">
-                Back
-              </button>
+            <div className="flex flex-col gap-3">
               <button onClick={submitTransfer} disabled={loading}
-                className="flex-1 py-3 rounded-xl bg-blue-700 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50">
+                className="w-full py-3.5 rounded-xl bg-blue-700 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50">
                 {loading
                   ? <><Loader2 size={16} className="animate-spin" /> Processing...</>
                   : bank === 'Other' ? 'Submit Request' : 'Send Transfer'}
+              </button>
+              <button onClick={() => setStep('form')}
+                className="w-full py-3 rounded-xl border border-gray-200 text-gray-600 text-sm font-medium">
+                Back
               </button>
             </div>
           </div>
