@@ -1,6 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
-import { MessageSquare, Send, Loader2, User, ChevronLeft, Image as ImageIcon, FileText, Landmark } from 'lucide-react'
+import { MessageSquare, Send, Loader2, User, ChevronLeft, Image as ImageIcon, FileText, Landmark, Search } from 'lucide-react'
 import { createClient } from '@/lib/supabase'
 
 interface Chat { id: string; user_id: string; status: string; created_at: string; latest?: string; latestAt?: string; full_name?: string }
@@ -23,6 +23,7 @@ function fmtTime(iso: string) {
 
 export default function AdminSupportInbox({ initialChatId }: { initialChatId?: string } = {}) {
   const [chats, setChats] = useState<Chat[]>([])
+  const [search, setSearch] = useState('')
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null)
   const autoSelectedRef = useRef(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -56,6 +57,8 @@ export default function AdminSupportInbox({ initialChatId }: { initialChatId?: s
   }, [selectedChat])
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const filteredChats = chats.filter(c => c.full_name?.toLowerCase().includes(search.trim().toLowerCase()))
 
   async function loadChats() {
     const { data: chatData } = await supabase
@@ -135,6 +138,15 @@ export default function AdminSupportInbox({ initialChatId }: { initialChatId?: s
                 <span className="text-sm font-semibold text-gray-800">Support Inbox</span>
                 <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">{chats.length}</span>
               </div>
+              <div className="relative mt-2">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search clients by name..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto">
               {chats.length === 0 && (
@@ -143,7 +155,12 @@ export default function AdminSupportInbox({ initialChatId }: { initialChatId?: s
                   No support messages yet
                 </div>
               )}
-              {chats.map(chat => (
+              {chats.length > 0 && filteredChats.length === 0 && (
+                <div className="text-center text-gray-400 text-xs mt-8 px-4">
+                  No clients match &quot;{search}&quot;
+                </div>
+              )}
+              {filteredChats.map(chat => (
                 <button key={chat.id} onClick={() => setSelectedChat(chat)}
                   className={`w-full px-4 py-3 text-left border-b border-gray-50 hover:bg-gray-50 transition-colors ${selectedChat?.id === chat.id ? 'bg-blue-50' : ''}`}>
                   <div className="flex items-center gap-2 mb-1">
